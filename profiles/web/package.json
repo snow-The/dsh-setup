@@ -48,7 +48,8 @@
         "@snow-the/dsh-session-handoff",
         "@linxin666/dsh-client-ui-skin-center",
         "@snow-the/dsh-lib-analyzer",
-        "@snow-the/dsh-browser"
+        "@snow-the/dsh-browser",
+        "@snow-the/dsh-search"
       ]
     }
   },
