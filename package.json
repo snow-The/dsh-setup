@@ -1,5 +1,5 @@
 {
-  "name": "dsh-profile-web",
+  "name": "dsh-setup",
   "private": true,
   "dependencies": {
     "@anionex/dsh-vision-toolkit": "^0.1.36",
