@@ -3,3 +3,10 @@ packages:
 
 nodeLinker: hoisted
 autoInstallPeers: false
+
+# pnpm 10: 仅白名单包允许执行 postinstall 脚本(原生依赖构建)
+allowBuilds:
+  cloudflared: true
+  cpu-features: true
+  node-pty: true
+  ssh2: true
