@@ -69,6 +69,7 @@ dsh web
 | `@linxin666/dsh-web-ui-all` | Web UI 插件全家桶(SSH/任务看板/桌面启动器等) |
 | `@liustack/modsearch` | 网页/X 搜索桥 |
 | `@snow-the/dsh-busyloop` | Agent-loop 引擎(宿主 LLM 适配 + 多轮循环 + 工具调度) |
+| `@snow-the/dsh-busyloop-tools` | busyloop 桥接:agent 工具 `busyloop_run`(一次性任务走 ark/direct 通道,主模型 token 零消耗)+ `busyloop_health` |
 | `@snow-the/dsh-gitkit` | Git 工具集 |
 | `@snow-the/dsh-snapshot` | 配置快照备份 |
 | `@snow-the/dsh-plugin-doctor` | 插件诊断 |
