@@ -22,7 +22,7 @@
     "dsh-undo-savepoint": "git+https://github.com/lire1131/dsh-undo-plugin.git",
     "dshmarket": "^1.16.0",
     "@snow-the/dsh-browser": "0.2.0",
-    "@snow-the/dsh-search": "0.2.0"
+    "@snow-the/dsh-notemap": "0.1.0","@snow-the/dsh-search": "0.2.0"
   },
   "dsh": {
     "profile": {
