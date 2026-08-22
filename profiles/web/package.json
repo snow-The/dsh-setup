@@ -1,0 +1,51 @@
+{
+  "name": "dsh-profile-web",
+  "private": true,
+  "dependencies": {
+    "@anionex/dsh-vision-toolkit": "^0.1.36",
+    "@linxin666/dsh-client-ui-skin-center": "0.2.3",
+    "@linxin666/dsh-web-ui-all": "^0.2.5",
+    "@liustack/modsearch": "^5.6.0",
+    "@nanmicoder/dsh-agent-teams": "^0.1.8",
+    "@openviking/dsh-memory-plugin": "github:volcengine/OpenViking#path:/examples/dsh-memory-plugin",
+    "@snow-the/dsh-busyloop": "^0.1.4",
+    "@snow-the/dsh-gitkit": "^0.1.0",
+    "@snow-the/dsh-lib-analyzer": "^0.1.0",
+    "@snow-the/dsh-plugin-doctor": "^0.1.0",
+    "@snow-the/dsh-plugin-guide": "^0.1.0",
+    "@snow-the/dsh-skill-pack": "^0.1.0",
+    "@snow-the/dsh-snapshot": "^0.1.0",
+    "@tt-a1i/archify-dsh": "^0.1.0",
+    "aegis": "github:GanyuanRan/Aegis",
+    "dsh-ark-plan": "github:snow-The/dsh-ark-plan",
+    "dsh-session-handoff": "github:snow-The/dsh-session-handoff#fea253f",
+    "dsh-undo-savepoint": "git+https://github.com/lire1131/dsh-undo-plugin.git",
+    "dshmarket": "^1.16.0"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dshmarket",
+        "@nanmicoder/dsh-agent-teams",
+        "@anionex/dsh-vision-toolkit",
+        "aegis",
+        "@linxin666/dsh-web-ui-all",
+        "@liustack/modsearch",
+        "@snow-the/dsh-gitkit",
+        "@snow-the/dsh-snapshot",
+        "@snow-the/dsh-plugin-doctor",
+        "@snow-the/dsh-plugin-guide",
+        "@snow-the/dsh-skill-pack",
+        "@openviking/dsh-memory-plugin",
+        "@tt-a1i/archify-dsh",
+        "dsh-undo-savepoint",
+        "dsh-ark-plan",
+        "dsh-session-handoff",
+        "@linxin666/dsh-client-ui-skin-center",
+        "@snow-the/dsh-lib-analyzer"
+      ]
+    }
+  }
+}
