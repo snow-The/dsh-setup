@@ -8,7 +8,7 @@
     "@liustack/modsearch": "^5.6.0",
     "@nanmicoder/dsh-agent-teams": "^0.1.8",
     "@openviking/dsh-memory-plugin": "github:volcengine/OpenViking#path:/examples/dsh-memory-plugin",
-    "@snow-the/dsh-busyloop": "0.1.11",
+    "@snow-the/dsh-busyloop": "0.1.12",
     "@snow-the/dsh-gitkit": "0.1.0",
     "@snow-the/dsh-lib-analyzer": "0.1.0",
     "@snow-the/dsh-plugin-doctor": "0.1.0",
