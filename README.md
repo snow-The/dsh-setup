@@ -68,7 +68,7 @@ dsh web
 | `aegis` | Aegis 方法论 |
 | `@linxin666/dsh-web-ui-all` | Web UI 插件全家桶(SSH/任务看板/桌面启动器等) |
 | `@liustack/modsearch` | 网页/X 搜索桥 |
-| `@snow-the/dsh-busyloop` | Agent-loop 引擎 + 自调用工具 `busyloop_run`(一次性任务走 ark/direct 通道,主模型 token 零消耗) |
+| `@snow-the/dsh-busyloop` | Agent-loop 引擎 + 自调用工具 `busyloop_run`(一次性任务走 ark/direct 通道,主模型 token 零消耗;0.1.7+ 已将 `@deepseek-ai/dsh-tools` peer 化,避免与宿主双实例导致工具调度器崩溃——安装务必同时加 dependencies + bundles,`pnpm install` 完成后再重启) |
 | `@snow-the/dsh-gitkit` | Git 工具集 |
 | `@snow-the/dsh-snapshot` | 配置快照备份 |
 | `@snow-the/dsh-plugin-doctor` | 插件诊断 |
