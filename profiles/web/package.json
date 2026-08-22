@@ -14,7 +14,7 @@
     "@snow-the/dsh-plugin-doctor": "0.1.0",
     "@snow-the/dsh-plugin-guide": "0.1.2",
     "@snow-the/dsh-skill-pack": "0.1.4",
-    "@snow-the/dsh-snapshot": "0.1.0",
+    "@snow-the/dsh-snapshot": "0.1.1",
     "@tt-a1i/archify-dsh": "^0.1.0",
     "aegis": "github:GanyuanRan/Aegis",
     "dsh-ark-plan": "github:snow-The/dsh-ark-plan",
