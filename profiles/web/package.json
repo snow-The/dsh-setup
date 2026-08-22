@@ -33,6 +33,7 @@
         "aegis",
         "@linxin666/dsh-web-ui-all",
         "@liustack/modsearch",
+        "@snow-the/dsh-busyloop",
         "@snow-the/dsh-gitkit",
         "@snow-the/dsh-snapshot",
         "@snow-the/dsh-plugin-doctor",
