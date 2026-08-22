@@ -94,7 +94,7 @@ dsh web
 | `@tt-a1i/archify-dsh` | 架构图生成 |
 | `dsh-undo-savepoint` | 配置撤销/回滚快照 |
 | `dsh-ark-plan` | Volcano Ark 计划 API 激活 |
-| `dsh-session-handoff` | 会话交接与上下文管理 |
+| `@snow-the/dsh-session-handoff` | 会话交接与上下文管理(GH Packages) |
 | `@linxin666/dsh-client-ui-skin-center` | 皮肤中心 |
 | `@snow-the/dsh-lib-analyzer` | 库吸收分析 |
 | `mcp-mslearn`(patch 插入) | Microsoft Learn 官方文档 MCP(免费,无需 key) |
