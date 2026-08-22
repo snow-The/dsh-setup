@@ -18,7 +18,7 @@
     "@tt-a1i/archify-dsh": "^0.1.0",
     "aegis": "github:GanyuanRan/Aegis",
     "dsh-ark-plan": "github:snow-The/dsh-ark-plan",
-    "dsh-session-handoff": "github:snow-The/dsh-session-handoff#fea253f",
+    "dsh-session-handoff": "github:snow-The/dsh-session-handoff#92f4fda",
     "dsh-undo-savepoint": "git+https://github.com/lire1131/dsh-undo-plugin.git",
     "dshmarket": "^1.16.0"
   },
