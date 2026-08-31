@@ -22,6 +22,17 @@ dsh-setup/
     └── web.local/       # 站点覆盖层(可选,部署时合并到模板之上)
 ```
 
+## 插件清单(2026-08-31)
+
+| 来源 | 插件 |
+| --- | --- |
+| UI 全家桶 | `dsh-web`(github:zhu1090093659/dsh-web,聚合包 `@linxin666/dsh-web-all` ^0.3.10):皮肤中心、任务看板、Git 图谱、鲸鱼娘宠物、SSH、图像理解、liangshen、远程 UI 等 |
+| 自有插件 | `@snow-the/*` 全部从 github:snow-The 安装:browser、busyloop、gitkit、lib-analyzer、notemap、plugin-doctor、plugin-guide、search、session-handoff、session-repair、skill-pack、snapshot |
+| 团队协作 | `@nanmicoder/dsh-agent-teams`(npm ^0.1.15) |
+| 第三方 | modsearch、memory-plugin、archify-dsh、aegis、dsh-ark-plan、dsh-undo-savepoint |
+
+> GitHub 安装的插件需要能访问 github.com;dshmarket 与视觉插件(@anionex/dsh-vision-toolkit)已移除。
+
 ## 部署步骤
 
 ### 前置要求
