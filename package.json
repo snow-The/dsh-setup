@@ -23,7 +23,7 @@
     "dshmarket": "^1.16.0",
     "@snow-the/dsh-browser": "0.2.0",
     "@snow-the/dsh-notemap": "0.3.1",
-    "@snow-the/dsh-search": "0.4.0"
+    "@snow-the/dsh-search": "0.4.1"
   },
   "dsh": {
     "profile": {
