@@ -4,8 +4,48 @@ packages:
 nodeLinker: hoisted
 autoInstallPeers: false
 
-# pnpm 10: 仅白名单包允许执行 postinstall 脚本(原生依赖构建)
+# Git-hosted plugins need their build (prepare) script to run, and pnpm requires each one to be
+# allowlisted. This list is NOT optional: without it a fresh install dies with
+# ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED and the plugins ship without their dist/.
+# NOTE: pnpm 10 accepts a bare package name here; pnpm 11 demands name@<tarball-url-with-commit>,
+# so the profile also pins packageManager to pnpm 10.
 allowBuilds:
+  "@linxin666/dsh-web-all": true
+  "@liustack/modsearch": true
+  "@nanmicoder/dsh-agent-teams": true
+  "@openviking/dsh-memory-plugin": true
+  "@snow-the/dsh-browser": true
+  "@snow-the/dsh-busyloop": true
+  "@snow-the/dsh-gitkit": true
+  "@snow-the/dsh-lib-analyzer": true
+  "@snow-the/dsh-notemap": true
+  "@snow-the/dsh-plugin-doctor": true
+  "@snow-the/dsh-plugin-guide": true
+  "@snow-the/dsh-search": true
+  "@snow-the/dsh-session-handoff": true
+  "@snow-the/dsh-session-repair": true
+  "@snow-the/dsh-skill-pack": true
+  "@snow-the/dsh-snapshot": true
+  "@tt-a1i/archify-dsh": true
+  "aegis": true
+  "dsh-ark-plan": true
+  "dsh-undo-savepoint": true
+  "dsh-web": true
+  "@dsh-external/dsh-super-injector": true
+  "@linxin666/dsh-session-archive": true
+  "@snow-the/dsh-research-lab": true
+  "dshmarket": true
+  "esbuild": true
+  "typescript": true
+  "@snow-the/dsh-search@https://codeload.github.com/snow-The/dsh-search/tar.gz/0144256570c0b45299d0055bb16a0d527d6324f7": true
+  "@snow-the/dsh-plugin-guide@https://codeload.github.com/snow-The/dsh-plugin-guide/tar.gz/69a55c19206ea3f00f80080883f9ee228c9dd824": true
+  "@snow-the/dsh-notemap@https://codeload.github.com/snow-The/dsh-notemap/tar.gz/ec71b75a6108bd2ef912c5f97f12e0a32aeb8db1": true
+  "dsh-web@https://codeload.github.com/zhu1090093659/dsh-web/tar.gz/1658c982f20ddc9c8447b4091c1f410723415282": true
+  "aegis@https://codeload.github.com/GanyuanRan/Aegis/tar.gz/773cce1e620e248310e15d00acd3f05561cba840": true
+  "@snow-the/dsh-research-lab@https://codeload.github.com/snow-The/dsh-research-lab/tar.gz/fada460cb5cb7c4f50c22c01a44107e99875b8996": true
+  "@dsh-external/dsh-super-injector@https://codeload.github.com/yjh051108/dsh-routing-suite/tar.gz/cc17b1f599f770e1dce573fe009835ea651fac70": true
+  "@openviking/dsh-memory-plugin@https://codeload.github.com/volcengine/OpenViking/tar.gz/4e3770d4f2b2cc6e77420de3e3e96e652903e538": true
+  "@snow-the/dsh-browser@https://codeload.github.com/snow-The/dsh-browser/tar.gz/": true
   cloudflared: true
   cpu-features: true
   node-pty: true

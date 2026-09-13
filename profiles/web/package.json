@@ -1,6 +1,7 @@
 {
   "name": "dsh-profile-web",
   "private": true,
+  "packageManager": "pnpm@10.14.0",
   "dependencies": {
     "@linxin666/dsh-web-all": "^0.3.10",
     "@liustack/modsearch": "^5.10.0",
