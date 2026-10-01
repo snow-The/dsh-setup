@@ -3,10 +3,10 @@
   "private": true,
   "packageManager": "pnpm@10.14.0",
   "dependencies": {
-    "@linxin666/dsh-web-all": "^0.3.10",
-    "@liustack/modsearch": "^5.10.0",
-    "@nanmicoder/dsh-agent-teams": "^0.1.15",
-    "@openviking/dsh-memory-plugin": "github:volcengine/OpenViking#path:/examples/dsh-memory-plugin",
+    "@deepseek-ai/dsh-experimental-agent-team-profile": "^0.2.0-rc.2",
+    "@linxin666/dsh-session-archive": "^0.4.2",
+    "@linxin666/dsh-web-all": "^0.4.2",
+    "@mars-sea/dsh-commandcode-provider": "^0.12.2",
     "@snow-the/dsh-acp-memory": "github:snow-The/dsh-acp-memory",
     "@snow-the/dsh-browser": "github:snow-The/dsh-browser",
     "@snow-the/dsh-busyloop": "github:snow-The/dsh-busyloop",
@@ -15,51 +15,48 @@
     "@snow-the/dsh-notemap": "github:snow-The/dsh-notemap",
     "@snow-the/dsh-plugin-doctor": "github:snow-The/dsh-plugin-doctor",
     "@snow-the/dsh-plugin-guide": "github:snow-The/dsh-plugin-guide",
-    "@snow-the/dsh-search": "github:snow-The/dsh-search",
     "@snow-the/dsh-research-lab": "github:snow-The/dsh-research-lab",
+    "@snow-the/dsh-search": "github:snow-The/dsh-search",
     "@snow-the/dsh-session-handoff": "github:snow-The/dsh-session-handoff",
     "@snow-the/dsh-session-repair": "github:snow-The/dsh-session-repair",
     "@snow-the/dsh-skill-pack": "github:snow-The/dsh-skill-pack",
     "@snow-the/dsh-snapshot": "github:snow-The/dsh-snapshot",
     "@tt-a1i/archify-dsh": "^0.1.0",
-    "aegis": "github:GanyuanRan/Aegis",
+    "aegis": "github:GanyuanRan/Aegis#v2.12.0",
     "dsh-ark-plan": "github:snow-The/dsh-ark-plan",
-    "dsh-undo-savepoint": "git+https://github.com/lire1131/dsh-undo-plugin.git",
-    "dsh-web": "github:zhu1090093659/dsh-web"
+    "dsh-undo-savepoint": "^0.4.9",
+    "dshmarket": "^1.66.7"
   },
   "dsh": {
     "profile": {
       "bundles": [
         "@deepseek-ai/dsh-base",
         "@deepseek-ai/dsh-web-app",
-        "dsh-web",
-        "@nanmicoder/dsh-agent-teams",
         "aegis",
-        "@liustack/modsearch",
         "@snow-the/dsh-busyloop",
         "@snow-the/dsh-gitkit",
         "@snow-the/dsh-snapshot",
         "@snow-the/dsh-plugin-doctor",
         "@snow-the/dsh-plugin-guide",
         "@snow-the/dsh-skill-pack",
-        "@openviking/dsh-memory-plugin",
-        "@tt-a1i/archify-dsh",
-        "dsh-undo-savepoint",
-        "dsh-ark-plan",
-        "@snow-the/dsh-research-lab",
         "@snow-the/dsh-session-handoff",
         "@snow-the/dsh-session-repair",
         "@snow-the/dsh-lib-analyzer",
-        "@snow-the/dsh-acp-memory",
         "@snow-the/dsh-browser",
         "@snow-the/dsh-search",
-        "@snow-the/dsh-notemap"
-      ]
-    }
-  },
-  "pnpm": {
-    "overrides": {
-      "@deepseek-ai/dsh-agent": "0.1.1-rc.2"
+        "@snow-the/dsh-notemap",
+        "@snow-the/dsh-research-lab",
+        "@snow-the/dsh-acp-memory",
+        "@tt-a1i/archify-dsh",
+        "dsh-undo-savepoint",
+        "dsh-ark-plan",
+        "dshmarket",
+        "@linxin666/dsh-session-archive",
+        "@linxin666/dsh-web-all",
+        "@mars-sea/dsh-commandcode-provider",
+        "@deepseek-ai/dsh-experimental-agent-team-profile"
+      ],
+      "patchReload": "live"
     }
   }
 }

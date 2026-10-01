@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # dsh-setup 一键部署脚本 (Linux / macOS, bash 3.2+)
 # 用法: git clone https://github.com/snow-The/dsh-setup.git; cd dsh-setup; ./setup.sh
-# 流程: 预检(远端同步) → 备份旧 profile → 复制模板 → 应用 web.local 覆盖 → pnpm install → 冒烟测试
-# 参数: --skip-install 跳过 pnpm install; --skip-smoke 跳过冒烟测试; --force 跳过"远端不同步"确认
+# 流程: 模板自检 → 预检(远端同步) → 备份旧 profile → 复制模板 → 应用 web.local 覆盖 → 安装依赖(含宿主兼容性判定) → 冒烟测试
+# 参数: --skip-install 跳过安装; --skip-smoke 跳过冒烟测试; --force 跳过"远端不同步"/"模板自检失败"的确认
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,7 +26,21 @@ done
 echo ""
 echo "=== dsh-setup: 部署 web profile ==="
 
-# ---------- 1. 预检: 仓库是否最新 ----------
+# ---------- 1. 模板自检: 清单/白名单/patch 是否自洽 ----------
+# 放在最前面: 模板腐化比安装失败更隐蔽 —— 装出一个"少了一半插件"的 profile 不会报错。
+echo ""
+echo "==> 模板自检"
+if [ -f "$REPO_DIR/scripts/check-template.mjs" ]; then
+  if ! node "$REPO_DIR/scripts/check-template.mjs"; then
+    echo "模板自检失败,见上方 ✗ 列表。修好再部署,或加 --force 强行继续(不推荐)。" >&2
+    if [ "$FORCE" != "1" ]; then exit 1; fi
+    echo "(--force: 继续)" >&2
+  fi
+else
+  echo "未找到 scripts/check-template.mjs,跳过模板自检。"
+fi
+
+# ---------- 2. 预检: 仓库是否最新 ----------
 echo ""
 echo "==> 预检: 仓库同步状态"
 if [ -n "$(git -C "$REPO_DIR" status --porcelain)" ]; then
@@ -73,14 +87,27 @@ else
   echo "未发现 profiles/web.local/,跳过站点覆盖。"
 fi
 
-# ---------- 5. 安装依赖 ----------
+# ---------- 6. 安装依赖 ----------
+# 优先走 `dsh plugin --profile web <pnpm 参数>`: 它是 pnpm 的透传包装, 但会额外跑宿主自己的
+# 兼容性判定, 并把"哪个插件因 peer 范围不满足会被禁用"连同补救命令一起打出来。
+# 裸 pnpm install 不会做这件事 —— 而那正是插件静默不加载的来源。
 if [ "$SKIP_INSTALL" != "1" ]; then
   echo ""
-  echo "安装依赖(pnpm install)..."
-  (cd "$PROFILE_DIR" && pnpm install)
+  if command -v dsh >/dev/null 2>&1; then
+    echo "安装依赖(dsh plugin --profile web install,含宿主兼容性判定)..."
+    (cd "$PROFILE_DIR" && dsh plugin --profile web install) || {
+      echo "dsh plugin install 失败。常见原因: git 依赖的 allowBuilds 缺条目(见上方 pnpm 提示)," >&2
+      echo "或需要能访问 GitHub。可在 profile 目录单独重试: cd $PROFILE_DIR && dsh plugin --profile web install" >&2
+      exit 1
+    }
+  else
+    echo "未找到 dsh CLI,退回裸 pnpm install(不会做兼容性判定)。"
+    echo "建议: npm i -g @deepseek-ai/dsh 后重跑本脚本。"
+    (cd "$PROFILE_DIR" && pnpm install)
+  fi
 fi
 
-# ---------- 6. 冒烟测试: bundles 可加载性 ----------
+# ---------- 7. 冒烟测试: bundles 可加载性 ----------
 if [ "$SKIP_SMOKE" != "1" ]; then
   echo ""
   echo "==> 冒烟测试: 校验 bundles 入口"
@@ -113,7 +140,7 @@ if [ "$SKIP_SMOKE" != "1" ]; then
   echo "冒烟测试通过: 所有 bundle 入口就位。"
 fi
 
-# ---------- 7. 完成提示 ----------
+# ---------- 8. 完成提示 ----------
 echo ""
 echo "=== 部署完成! ==="
 echo "1. 启动:  dsh web"

@@ -1,7 +1,7 @@
 # dsh-setup 一键部署脚本(Windows PowerShell 5.1+ / pwsh 7+)
 # 用法: git clone https://github.com/snow-The/dsh-setup.git; cd dsh-setup; .\setup.ps1
-# 流程: 预检(远端同步) → 备份旧 profile → 复制模板 → 应用 web.local 覆盖 → pnpm install → 冒烟测试
-# 参数: -SkipInstall 跳过 pnpm install; -SkipSmoke 跳过冒烟测试; -Force 跳过"远端不同步"确认
+# 流程: 模板自检 → 预检(远端同步) → 备份旧 profile → 复制模板 → 应用 web.local 覆盖 → 安装依赖(含宿主兼容性判定) → 冒烟测试
+# 参数: -SkipInstall 跳过安装; -SkipSmoke 跳过冒烟测试; -Force 跳过"远端不同步"/"模板自检失败"的确认
 param(
     [switch]$SkipInstall,
     [switch]$SkipSmoke,
@@ -24,7 +24,23 @@ if (-not (Test-Path $templateDir)) {
     exit 1
 }
 
-# ---------- 1. 预检: 仓库是否最新 ----------
+# ---------- 1. 模板自检: 清单/白名单/patch 是否自洽 ----------
+# 放在最前面: 模板腐化比安装失败更隐蔽 —— 装出一个"少了一半插件"的 profile 不会报错。
+Write-Host ""
+Write-Host "==> 模板自检" -ForegroundColor Cyan
+$checker = Join-Path $repoDir "scripts\check-template.mjs"
+if (Test-Path $checker) {
+    node $checker
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "模板自检失败,见上方 ✗ 列表。修好再部署。" -ForegroundColor Red
+        if (-not $Force) { exit 1 }
+        Write-Host "(-Force: 继续)" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "未找到 scripts\check-template.mjs,跳过模板自检。" -ForegroundColor DarkGray
+}
+
+# ---------- 2. 预检: 仓库是否最新 ----------
 Write-Host ""
 Write-Host "==> 预检: 仓库同步状态" -ForegroundColor Cyan
 $dirty = git -C $repoDir status --porcelain
@@ -66,15 +82,33 @@ if (Test-Path $overlayDir) {
 }
 
 # ---------- 5. 安装依赖 ----------
+# 优先走 `dsh plugin --profile web <pnpm 参数>`: 它是 pnpm 的透传包装, 但会额外跑宿主自己的
+# 兼容性判定, 并把"哪个插件因 peer 范围不满足会被禁用"连同补救命令一起打出来。
+# 裸 pnpm install 不会做这件事 —— 而那正是插件静默不加载的来源。
 if (-not $SkipInstall) {
     Write-Host ""
-    Write-Host "安装依赖(pnpm install)..."
-    Push-Location $profileDir
-    try {
-        pnpm install
-        if ($LASTEXITCODE -ne 0) { throw "pnpm install 失败(exit $LASTEXITCODE)" }
-    } finally {
-        Pop-Location
+    $dshCmd = Get-Command dsh -ErrorAction SilentlyContinue
+    if ($dshCmd) {
+        Write-Host "安装依赖(dsh plugin --profile web install,含宿主兼容性判定)..."
+        Push-Location $profileDir
+        try {
+            dsh plugin --profile web install
+            if ($LASTEXITCODE -ne 0) {
+                throw "dsh plugin install 失败(exit $LASTEXITCODE)。常见原因: git 依赖的 allowBuilds 缺条目(见上方 pnpm 提示),或需能访问 GitHub。"
+            }
+        } finally {
+            Pop-Location
+        }
+    } else {
+        Write-Host "未找到 dsh CLI,退回裸 pnpm install(不会做兼容性判定)。" -ForegroundColor Yellow
+        Write-Host "建议: npm i -g @deepseek-ai/dsh 后重跑本脚本。" -ForegroundColor Yellow
+        Push-Location $profileDir
+        try {
+            pnpm install
+            if ($LASTEXITCODE -ne 0) { throw "pnpm install 失败(exit $LASTEXITCODE)" }
+        } finally {
+            Pop-Location
+        }
     }
 }
 
@@ -114,7 +148,7 @@ if (-not $SkipSmoke) {
     Write-Host "冒烟测试通过: 所有 bundle 入口就位。" -ForegroundColor Green
 }
 
-# ---------- 7. 完成提示 ----------
+# ---------- 8. 完成提示 ----------
 Write-Host ""
 Write-Host "=== 部署完成! ===" -ForegroundColor Green
 Write-Host "1. 启动:  dsh web"
