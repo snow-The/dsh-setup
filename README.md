@@ -86,7 +86,9 @@ dsh web
 
 ### 自研插件（`@snow-the/*`，均从 GitHub 安装）
 
-`dsh-acp-memory` · `dsh-browser` · `dsh-busyloop` · `dsh-gitkit` · `dsh-lib-analyzer` · `dsh-notemap` · `dsh-plugin-doctor` · `dsh-plugin-guide` · `dsh-research-lab` · `dsh-search` · `dsh-session-handoff` · `dsh-session-repair` · `dsh-skill-pack` · `dsh-snapshot`
+`dsh-acp-memory` · `dsh-browser` · `dsh-busyloop` · `dsh-gitkit` · `dsh-lib-analyzer` · `dsh-notemap` · `dsh-plugin-doctor` · `dsh-plugin-guide` · `dsh-research-lab` · `dsh-search` · `dsh-session-handoff` · `dsh-session-repair` · `dsh-skill-pack` · `dsh-snapshot` · `dsh-eigenflux` · `dsh-w8-sandbox`
+
+> `dsh-eigenflux` 与 `dsh-w8-sandbox` 原先**没有 git remote** —— 你在本机是靠 `file:` 引用跑它们的，所以它们曾是新机器上唯二装不回来的插件。现已建仓：[snow-The/dsh-eigenflux](https://github.com/snow-The/dsh-eigenflux) · [snow-The/dsh-w8-sandbox](https://github.com/snow-The/dsh-w8-sandbox)。
 
 ### 第三方
 
@@ -114,10 +116,17 @@ dsh web
 | `@nanmicoder/dsh-agent-teams` | 被原生 agent-team profile 取代 |
 | `@openviking/dsh-memory-plugin` | peer 是 `>=0.1.0-rc.6 <0.2.0`，在 0.2.0 宿主上**必然 ERESOLVE** |
 | `dsh-web` · `@linxin666/dsh-web-ui-all` · `@linxin666/dsh-client-ui-skin-center` | 均被 `@linxin666/dsh-web-all` 收拢 |
+| `@snow-the/dsh-ui-shim` | **已退役，见下** |
 
-### 本模板未包含的两个自研插件
+### `dsh-ui-shim` 为什么退役
 
-`@snow-the/dsh-eigenflux` 与 `@snow-the/dsh-w8-sandbox` **没有配置 git remote**，因此无法从 GitHub 安装。要用它们，需先建仓库并推送，再按上面的自研插件格式加入清单。
+它是在「同时装有两套 UI」的时期写的：给 DOM 打上 `data-pane` / `data-dsh-frame` 标记，让插件不必依赖官方会变的 class 名去定位侧栏/对话区/详情区。三条证据说明它的前提已经消失：
+
+1. **零消费者** —— 全部自研插件里没有任何一处读它打的那几个属性；
+2. **两个 profile 都没装它**，也都不在依赖清单里；
+3. 它当时 `dsh.client.inject` 声明的是 `@deepseek-ai/dsh-client-runtime`，**而那个包在 0.2.0 里根本不存在** —— 也就是说它在 0.2.0 上从未真正跑起来过。
+
+现在只剩 `@linxin666/dsh-web-all` 一套 UI，中间层没有存在理由。源码保留在 `dsh-own-plugins` 里可随时取回，但不再进入任何模板。
 
 ## 世代与兼容性
 

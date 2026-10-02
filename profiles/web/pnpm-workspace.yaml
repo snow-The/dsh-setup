@@ -20,6 +20,7 @@ allowBuilds:
   "@snow-the/dsh-acp-memory": true
   "@snow-the/dsh-browser": true
   "@snow-the/dsh-busyloop": true
+  "@snow-the/dsh-eigenflux": true
   "@snow-the/dsh-gitkit": true
   "@snow-the/dsh-lib-analyzer": true
   "@snow-the/dsh-notemap": true
@@ -31,6 +32,7 @@ allowBuilds:
   "@snow-the/dsh-session-repair": true
   "@snow-the/dsh-skill-pack": true
   "@snow-the/dsh-snapshot": true
+  "@snow-the/dsh-w8-sandbox": true
   # --- third-party plugins ---
   "@linxin666/dsh-session-archive": true
   "@linxin666/dsh-web-all": true

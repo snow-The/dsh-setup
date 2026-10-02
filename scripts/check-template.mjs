@@ -37,6 +37,7 @@ const RETIRED = new Map([
   ['dsh-web', '被 @linxin666/dsh-web-all 取代'],
   ['@linxin666/dsh-web-ui-all', '被 @linxin666/dsh-web-all 取代'],
   ['@linxin666/dsh-client-ui-skin-center', '被 @linxin666/dsh-web-all 内聚'],
+  ['@snow-the/dsh-ui-shim', '已退役：它服务于"同时装有两套 UI"的时期（给 DOM 打 data-pane / data-dsh-frame，让插件不依赖官方会变的 class 名）。现在只剩 dsh-web-all 一套 UI；全部自研插件里零处消费它打的标记，两个 profile 也都没装它。它原先 inject 的 @deepseek-ai/dsh-client-runtime 在 0.2.0 里根本不存在 —— 它在 0.2.0 上从未真正跑起来过。'],
 ]);
 
 // ---------- 1. profile 清单 ----------
