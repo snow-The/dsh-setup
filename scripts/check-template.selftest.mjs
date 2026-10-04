@@ -126,6 +126,16 @@ const cases = [
       if (b.length >= 3 && b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf) fs.writeFileSync(p, b.subarray(3));
     },
   },
+  {
+    // 同一根因的第三面：PS 5.1 的 Get-Content 按 ANSI 解码无 BOM 的 UTF-8，
+    // 第三方 package.json 里的中文乱码后打断 JSON。
+    label: '在 setup.ps1 里塞一句裸 Get-Content',
+    expectFail: true,
+    mutate: (d) => {
+      const p = path.join(d, 'setup.ps1');
+      fs.appendFileSync(p, '\n$probe = Get-Content -Raw "x.json" | ConvertFrom-Json\n');
+    },
+  },
 ];
 
 console.log('check-template 自检（变异测试）\n');

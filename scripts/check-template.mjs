@@ -214,6 +214,27 @@ function walkPs1(dir, out = []) {
   if (checked && !fails.some((f) => f.includes('BOM'))) ok(`${checked} 个 .ps1 的编码在 PowerShell 5.1 下可解析`);
 }
 
+// 5b. setup.ps1 不得用【裸 Get-Content】读文件。
+// 同一个根因的第三面：PS 5.1 的 Get-Content 对无 BOM 的文件按 ANSI 码页解码。
+// 第三方包的 package.json 多是 UTF-8 无 BOM，只要含一个中文字符串（dshmarket 的描述就写着
+// "可视化插件市场"），读出来就是乱码，而乱码里的引号会打断 JSON → ConvertFrom-Json 抛异常，
+// 冒烟测试整个崩掉。必须走 [System.IO.File]::ReadAllText($p, [Text.Encoding]::UTF8)。
+{
+  const p = path.join(ROOT, 'setup.ps1');
+  if (fs.existsSync(p)) {
+    const offenders = [];
+    fs.readFileSync(p, 'utf8').split(/\r?\n/).forEach((line, i) => {
+      const code = line.replace(/(^|\s)#.*$/, '');          // 去掉行尾注释
+      if (/\bGet-Content\b/.test(code) && !/-(Encoding|Raw\s+-Encoding)\b/.test(code)) {
+        offenders.push(`:${i + 1}`);
+      }
+    });
+    if (offenders.length) {
+      bad(`setup.ps1 用了裸 Get-Content（PS 5.1 按 ANSI 解码，无 BOM 的 UTF-8 JSON 会解析失败）: ${offenders.join(', ')}。改用 [System.IO.File]::ReadAllText($p,[Text.Encoding]::UTF8)`);
+    } else ok('setup.ps1 没有裸 Get-Content（PS 5.1 下读文件是安全的）');
+  }
+}
+
 // ---------- 输出 ----------
 console.log('dsh-setup 模板一致性检查\n');
 for (const p of passes) console.log(`  ✓ ${p}`);

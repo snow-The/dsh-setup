@@ -9,6 +9,20 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
+# 按 UTF-8 读取并解析 JSON —— 不要用裸 Get-Content。
+#
+# 理由: Windows PowerShell 5.1 的 Get-Content 对一个【没有 BOM】的文件按系统 ANSI 码页解码。
+# 第三方包的 package.json 大多是 UTF-8 无 BOM,只要里面有一个中文字符串(例如 dshmarket 的
+# 描述写着"可视化插件市场"),PS 5.1 就会读成乱码,而乱码里出现的引号会打断 JSON,
+# 于是 ConvertFrom-Json 直接抛 ArgumentException —— 冒烟测试整个崩掉。
+#
+# 注意: pwsh 7 默认就是 UTF-8,所以这个坑在开发机上永远看不到,只有新机器会踩。
+# 这与 setup.ps1 自身需要 UTF-8 BOM 是同一个根因的两面。
+function Read-Json([string]$Path) {
+    $text = [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)
+    return $text | ConvertFrom-Json
+}
+
 Write-Host ""
 Write-Host "=== dsh-setup: 部署 web profile ===" -ForegroundColor Cyan
 
@@ -116,7 +130,7 @@ if (-not $SkipInstall) {
 if (-not $SkipSmoke) {
     Write-Host ""
     Write-Host "==> 冒烟测试: 校验 bundles 入口" -ForegroundColor Cyan
-    $pkg = Get-Content -Raw (Join-Path $profileDir "package.json") | ConvertFrom-Json
+    $pkg = Read-Json (Join-Path $profileDir "package.json")
     if (-not $pkg.dsh -or -not $pkg.dsh.profile -or -not $pkg.dsh.profile.bundles) {
         Write-Host "package.json 缺少 dsh.profile.bundles,冒烟测试无法执行。" -ForegroundColor Red
         exit 1
@@ -130,7 +144,7 @@ if (-not $SkipSmoke) {
             $failures += "$b (未安装)"
             continue
         }
-        $bp = Get-Content -Raw $bpJson | ConvertFrom-Json
+        $bp = Read-Json $bpJson
         $main = if ($bp.main) { $bp.main } else { "index.js" }
         $entry = Join-Path $pkgDir $main
         $fallback = Join-Path $pkgDir "dist\index.js"
