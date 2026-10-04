@@ -154,6 +154,36 @@ for (const f of ['setup.ps1', 'setup.sh']) {
 }
 ok('setup.ps1 / setup.sh 都在');
 
+// 5a. 含非 ASCII 的 .ps1 必须有 UTF-8 BOM。
+// 这不是理论问题：2026-10-04 在一台笔电（Windows 自带的 PowerShell 5.1）上实测，
+// setup.ps1 整个文件解析失败、报 "Unexpected token"，一行都没执行 —— 一键部署在那台机器上
+// 等于不存在。根因是 PS 5.1 在没有 BOM 时按系统 ANSI 码页解码脚本（中文机=GBK），
+// UTF-8 的中文乱码后打断了字符串字面量。而开发机是 pwsh 7（默认 UTF-8），所以从未暴露。
+// 修法: node scripts/fix-ps1-bom.mjs
+function walkPs1(dir, out = []) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name === '.git' || e.name === 'node_modules') continue;
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walkPs1(p, out);
+    else if (e.name.toLowerCase().endsWith('.ps1')) out.push(p);
+  }
+  return out;
+}
+{
+  let checked = 0;
+  for (const p of walkPs1(ROOT)) {
+    checked++;
+    const buf = fs.readFileSync(p);
+    const rel = path.relative(ROOT, p).replace(/\\/g, '/');
+    const hasBom = buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf;
+    const nonAscii = buf.some((b) => b > 127);
+    if (nonAscii && !hasBom) {
+      bad(`${rel} 含非 ASCII 但缺 UTF-8 BOM —— Windows PowerShell 5.1 会按 ANSI 码页解码，中文乱码导致整个文件解析失败、一行都不执行。修: node scripts/fix-ps1-bom.mjs`);
+    }
+  }
+  if (checked && !fails.some((f) => f.includes('BOM'))) ok(`${checked} 个 .ps1 的编码在 PowerShell 5.1 下可解析`);
+}
+
 // ---------- 输出 ----------
 console.log('dsh-setup 模板一致性检查\n');
 for (const p of passes) console.log(`  ✓ ${p}`);

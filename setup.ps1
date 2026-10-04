@@ -1,4 +1,4 @@
-# dsh-setup 一键部署脚本(Windows PowerShell 5.1+ / pwsh 7+)
+﻿# dsh-setup 一键部署脚本(Windows PowerShell 5.1+ / pwsh 7+)
 # 用法: git clone https://github.com/snow-The/dsh-setup.git; cd dsh-setup; .\setup.ps1
 # 流程: 模板自检 → 预检(远端同步) → 备份旧 profile → 复制模板 → 应用 web.local 覆盖 → 安装依赖(含宿主兼容性判定) → 冒烟测试
 # 参数: -SkipInstall 跳过安装; -SkipSmoke 跳过冒烟测试; -Force 跳过"远端不同步"/"模板自检失败"的确认

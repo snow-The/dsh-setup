@@ -18,4 +18,7 @@ dsh-ssh.json
 *.log
 .DS_Store
 Thumbs.db
-.commit-msg.txt
+# 提交消息临时文件 —— 用通配覆盖所有变体。
+# 早先只写了 .commit-msg.txt，结果 .git-commit-msg.tmp 被 git add -A 提交了进去；
+# 而当时的"检查"用 Select-String 'commit-msg' 命中了那条不相干的规则，所以没报出来。
+.*commit-msg*
