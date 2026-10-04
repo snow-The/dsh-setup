@@ -71,6 +71,36 @@ if (pkg) {
 
   // 1e. patchReload
   if (pkg.dsh?.profile?.patchReload !== 'live') note('dsh.profile.patchReload 未设为 "live"');
+
+  // 1f. 宿主世代耦合的第三方包必须【精确钉版本】，不能浮动。
+  //
+  // 2026-10-04 实测：在一台笔电上全新安装，宿主门禁拒绝了整个安装 ——
+  //   @mars-sea/dsh-commandcode-provider@0.12.4 is incompatible with dsh 0.2.0-rc.2
+  //   peerDependencies { "@deepseek-ai/dsh-llm": "0.2.1-alpha.1", ... }
+  // 模板当时写的是 ^0.12.2，而它的版本表是：
+  //   0.12.2  dsh-llm=0.2.0-rc.2      ← 可用
+  //   0.12.3  dsh-llm=0.2.0-rc.2      ← 可用
+  //   0.12.4  dsh-llm=0.2.1-alpha.1   ← 换成下一代宿主了
+  // 【一个 patch 号就换了要求的宿主世代】—— 对这种包，浮动引用是主动制造故障。
+  //
+  // 而且 ^ 和 ~ 在这里都救不了：对 0.x.y 版本两者等价，都是 >=0.12.2 <0.13.0，
+  // 都包含 0.12.4。只能精确钉。
+  //
+  // 我们自己的机器没暴露它，因为本机 lockfile 早就钉在 0.12.2 了 —— 只有全新安装会中招，
+  // 也就是只有"新机器"会中招。这正是本模板存在的理由。
+  const HOST_COUPLED = new Map([
+    ['@mars-sea/dsh-commandcode-provider', '0.12.4 把 peer 从 dsh-llm=0.2.0-rc.2 换成 0.2.1-alpha.1（下一代宿主）。^/~ 对 0.x.y 等价，都拦不住，必须精确钉。'],
+  ]);
+  {
+    const drifted = [];
+    for (const [name, why] of HOST_COUPLED) {
+      const v = deps[name];
+      if (v === undefined) continue;                       // 没装就不管
+      if (!/^\d+\.\d+\.\d+$/.test(String(v))) drifted.push(`${name}="${v}"（${why}）`);
+    }
+    if (drifted.length) bad(`宿主世代耦合的包被写成浮动范围（全新安装会被宿主门禁拒绝）: ${drifted.join('; ')}`);
+    else ok(`${HOST_COUPLED.size} 个宿主世代耦合的包都已精确钉版本`);
+  }
 }
 
 // ---------- 2. allowBuilds 与依赖对齐 ----------

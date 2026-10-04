@@ -109,6 +109,23 @@ const cases = [
     expectFail: true,
     mutate: (d) => fs.rmSync(path.join(d, 'setup.sh')),
   },
+  {
+    // 2026-10-04 笔电实测: 全新安装时 ^0.12.2 解析到 0.12.4，
+    // 而 0.12.4 的 peer 指向 0.2.1-alpha.1（下一代宿主）→ 宿主门禁拒绝整个安装。
+    label: '把宿主世代耦合的包改回浮动范围',
+    expectFail: true,
+    mutate: (d) => { const j = readPkg(d); j.dependencies['@mars-sea/dsh-commandcode-provider'] = '^0.12.2'; writePkg(d, j); },
+  },
+  {
+    // Windows PowerShell 5.1 无 BOM 时按 ANSI 码页读脚本，中文乱码 → 整个文件解析失败。
+    label: '剥掉 setup.ps1 的 UTF-8 BOM',
+    expectFail: true,
+    mutate: (d) => {
+      const p = path.join(d, 'setup.ps1');
+      const b = fs.readFileSync(p);
+      if (b.length >= 3 && b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf) fs.writeFileSync(p, b.subarray(3));
+    },
+  },
 ];
 
 console.log('check-template 自检（变异测试）\n');

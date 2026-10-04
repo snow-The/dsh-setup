@@ -6,7 +6,7 @@
     "@deepseek-ai/dsh-experimental-agent-team-profile": "^0.2.0-rc.2",
     "@linxin666/dsh-session-archive": "^0.4.2",
     "@linxin666/dsh-web-all": "^0.4.2",
-    "@mars-sea/dsh-commandcode-provider": "^0.12.2",
+    "@mars-sea/dsh-commandcode-provider": "0.12.2",
     "@snow-the/dsh-acp-memory": "github:snow-The/dsh-acp-memory",
     "@snow-the/dsh-browser": "github:snow-The/dsh-browser",
     "@snow-the/dsh-busyloop": "github:snow-The/dsh-busyloop",
