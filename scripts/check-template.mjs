@@ -64,9 +64,20 @@ if (pkg) {
   if (pinned.length) bad(`@snow-the/* 被钉成精确版本（会漂移/过期）: ${pinned.map(([k, v]) => `${k}@${v}`).join(', ')}`);
   else ok('@snow-the/* 全部使用浮动 github: 引用');
 
-  // 1d. pnpm.overrides 是 0.1.x 时代的补丁，不该再有
-  if (pkg.pnpm?.overrides && Object.keys(pkg.pnpm.overrides).length) {
-    bad(`package.json 仍有 pnpm.overrides（0.1.x 时代的宿主补丁，在 0.2.0 上会打架）: ${JSON.stringify(pkg.pnpm.overrides)}`);
+  // 1d. pnpm.overrides 只允许用来【约束第三方传递依赖】，不许用来给宿主打补丁。
+  //
+  // 这条原先是一刀切"不该有 overrides" —— 那是对 0.1.x 时代 `@deepseek-ai/dsh-agent`
+  // 那类【宿主补丁】的反应。2026-10-18 出现了合法用法：
+  //   @linxin666/dsh-web-all@0.4.6 的内部有 4 个子包写成 `^0.4.6`，会浮动到 0.4.7，
+  //   而 0.4.7 要求宿主 >=0.2.1-rc.2 —— 在 0.2.0-rc.2 上整组装不上（宿主拒绝并回滚）。
+  //   把它们钉在 0.4.6 只能靠 overrides。
+  // 所以规则收窄到它真正想防的东西：不许覆盖 @deepseek-ai/*。
+  const overrides = pkg.pnpm?.overrides ?? {};
+  const hostOverrides = Object.keys(overrides).filter((k) => k.startsWith('@deepseek-ai/'));
+  if (hostOverrides.length) {
+    bad(`pnpm.overrides 覆盖了宿主包（0.1.x 时代的做法，在 0.2.x 上会打架）: ${hostOverrides.join(', ')}`);
+  } else if (Object.keys(overrides).length) {
+    ok(`pnpm.overrides 只约束第三方传递依赖（${Object.keys(overrides).length} 条），未碰宿主包`);
   } else ok('没有 pnpm.overrides');
 
   // 1e. patchReload
@@ -89,7 +100,9 @@ if (pkg) {
   // 我们自己的机器没暴露它，因为本机 lockfile 早就钉在 0.12.2 了 —— 只有全新安装会中招，
   // 也就是只有"新机器"会中招。这正是本模板存在的理由。
   const HOST_COUPLED = new Map([
-    ['@mars-sea/dsh-commandcode-provider', '0.12.4 把 peer 从 dsh-llm=0.2.0-rc.2 换成 0.2.1-alpha.1（下一代宿主）。^/~ 对 0.x.y 等价，都拦不住，必须精确钉。'],
+    ['@mars-sea/dsh-commandcode-provider', '0.12.4 把 peer 从 dsh-llm=0.2.0-rc.2 换成 0.2.1-alpha.1（下一代宿主）。^/~ 对 0.x.y 等价，都拦不住，必须精确钉。0.13.4 是 0.2.0-rc.2 上仍被接受的最高版。'],
+    ['@linxin666/dsh-web-all', '0.4.7 把 peer 改成 >=0.2.1-rc.2；0.4.6 是 >=0.2.0-rc.2。浮动到 0.4.7 会在 0.2.0-rc.2 上被拒绝。另注：它内部的 4 个子包写成 ^0.4.6，需要靠 pnpm.overrides 一并钉住。'],
+    ['@linxin666/dsh-session-archive', '同上：0.4.6 可用，0.4.7 要求 >=0.2.1-rc.2。'],
   ]);
   {
     const drifted = [];

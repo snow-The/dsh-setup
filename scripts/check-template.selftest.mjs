@@ -117,6 +117,22 @@ const cases = [
     mutate: (d) => { const j = readPkg(d); j.dependencies['@mars-sea/dsh-commandcode-provider'] = '^0.12.2'; writePkg(d, j); },
   },
   {
+    // 2026-10-18: @linxin666/* 在 0.4.7 也跨到了 0.2.1 世代，所以它们进了 HOST_COUPLED。
+    label: '把 @linxin666/dsh-web-all 改回浮动范围',
+    expectFail: true,
+    mutate: (d) => { const j = readPkg(d); j.dependencies['@linxin666/dsh-web-all'] = '^0.4.2'; writePkg(d, j); },
+  },
+  {
+    // overrides 只许约束第三方传递依赖；覆盖宿主包必须落闸。
+    label: '在 overrides 里给宿主包打补丁',
+    expectFail: true,
+    mutate: (d) => {
+      const j = readPkg(d);
+      j.pnpm = { overrides: { ...(j.pnpm?.overrides ?? {}), '@deepseek-ai/dsh-agent': '0.1.1-rc.2' } };
+      writePkg(d, j);
+    },
+  },
+  {
     // Windows PowerShell 5.1 无 BOM 时按 ANSI 码页读脚本，中文乱码 → 整个文件解析失败。
     label: '剥掉 setup.ps1 的 UTF-8 BOM',
     expectFail: true,
