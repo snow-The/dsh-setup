@@ -43,7 +43,8 @@ allowBuilds:
   "dsh-undo-savepoint": true
   "dshmarket": true
   # --- official layers that ship a build step ---
-  "@deepseek-ai/dsh-experimental-agent-team-profile": true
+  # (none currently: the @deepseek-ai/* layers are supplied by the host itself,
+  #  not installed by this profile's pnpm, so they must not be listed here.)
   # --- build tooling used by the prepare scripts above ---
   "esbuild": true
   "typescript": true
