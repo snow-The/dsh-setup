@@ -1,0 +1,13 @@
+# 行尾策略：不依赖每个人机器上的 core.autocrlf。
+#
+# 仓库里的脚本一律以 LF 存储。checkout 时 .sh 强制 LF ——
+# 因为 bash 会把 CRLF 里的 \r 当成命令的一部分，报：
+#   syntax error near unexpected token `$'do\r''
+# 2026-10-19 在 Windows 上实测到这一步：工作区是 CRLF，`bash -n setup.sh` 直接失败，
+# 而 blob 里其实是纯 LF。也就是说这个失败只发生在 checkout 之后，与仓库内容无关，
+# 所以必须由 .gitattributes 固定，不能指望用户的 git 配置。
+#
+# .ps1 保持默认（text=auto）。PowerShell 5.1 对 LF/CRLF 都能解析，
+# 真正要命的是 UTF-8 BOM，那由 check-template 的 [5a] 断言，不由行尾策略负责。
+* text=auto
+*.sh    text eol=lf
