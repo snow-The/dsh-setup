@@ -7,6 +7,19 @@
  * pnpm.overrides 还压着 0.1.x 时代的 dsh-agent。这些都是**能被机器判定的**，
  * 却一直没人判。本脚本把它们变成 CI 断言。
  *
+ * 自证约定（2026-10-19 重构）：
+ *   每条检查都有**稳定 ID**，输出里带 `[1a]`。这不是装饰 ——
+ *   - check-template.selftest.mjs 断言"某条变异必须由**指定的那条**规则抓到"，
+ *     而不是笼统的"退出码非 0"。否则一条变异被别的规则误抓，测试照样绿，
+ *     而那条真正要验的规则从没被证明过。
+ *   - 本脚本运行到最后会断言 **CHECKS 里登记过的每一条都真的执行过**。
+ *     代码与清单一旦漂移（某条检查因为分支改动不再运行），立刻失败。
+ *     这一条防的正是"规则静默不触发"—— 比规则本身出错更危险。
+ *
+ * 用法：
+ *   node scripts/check-template.mjs            跑检查
+ *   node scripts/check-template.mjs --list-checks   列出全部检查 ID（给自检读覆盖用）
+ *
  * 退出码 0 = 模板自洽；1 = 有失败项。
  */
 import fs from 'node:fs';
@@ -16,14 +29,45 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PROFILE = path.join(ROOT, 'profiles', 'web');
 
+// ---------- 检查登记表 ----------
+// 这里的每一条都必须在本进程里至少被触发一次，否则结尾断言失败。
+// 新增检查时：先在这里登记，再加一条对应的变异用例，然后才允许写实现逻辑。
+const CHECKS = {
+  '1': 'profiles/web/package.json 可解析',
+  '1a': '每个非官方 bundle 都有对应的 dependency',
+  '1b': '依赖里没有已退役的包',
+  '1c': '@snow-the/* 使用浮动 github: 引用，未钉精确版本',
+  '1d': 'pnpm.overrides 只约束第三方传递依赖，未覆盖宿主包',
+  '1e': 'dsh.profile.patchReload 为 live',
+  '1f': '宿主世代耦合的包精确钉版本',
+  '1g': '宿主自有的 @deepseek-ai/* 未重复声明为 profile 依赖',
+  '2': 'pnpm-workspace.yaml 可读、allowBuilds 可解析',
+  '2a': '全部 git 依赖都有 allowBuilds 条目',
+  '2b': 'allowBuilds 不含 hash 形式的键',
+  '2c': 'allowBuilds 不含 sha 为空的坏条目',
+  '3': 'cordis.patch.yml 无重复声明',
+  '4': 'cordis.yml 是空列表',
+  '5': 'setup.ps1 / setup.sh 都在',
+  '5a': '含非 ASCII 的 .ps1 都带 UTF-8 BOM',
+  '5b': 'setup.ps1 不使用裸 Get-Content',
+};
+
+if (process.argv.includes('--list-checks')) {
+  // checks   = 需要被变异用例覆盖的真实检查
+  // synthetic = 自证机制自己的 ID（'6' 由结尾断言产生，不是一条"检查"），
+  //             自检脚本可以引用它，但不要求它出现在 CHECKS 里。
+  process.stdout.write(JSON.stringify({ checks: Object.keys(CHECKS), synthetic: ['6'] }, null, 2) + '\n');
+  process.exit(0);
+}
+
+const hit = new Set();
 const fails = [];
 const passes = [];
 const warn = [];
-const ok = (m) => passes.push(m);
-const bad = (m) => fails.push(m);
-const note = (m) => warn.push(m);
+const ok = (id, m) => { hit.add(id); passes.push({ id, m }); };
+const bad = (id, m) => { hit.add(id); fails.push({ id, m }); };
+const note = (id, m) => { hit.add(id); warn.push({ id, m }); };
 
-const readJson = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) { bad(`${path.relative(ROOT, p)} 无法解析: ${e.message}`); return null; } };
 const read = (p) => { try { return fs.readFileSync(p, 'utf8'); } catch { return null; } };
 
 // ---------- 已退役的包：出现在依赖里即为腐化 ----------
@@ -42,46 +86,54 @@ const RETIRED = new Map([
 
 // ---------- 1. profile 清单 ----------
 const pkgPath = path.join(PROFILE, 'package.json');
-const pkg = readJson(pkgPath);
+let pkg = null;
+try {
+  pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  ok('1', 'profiles/web/package.json 解析成功');
+} catch (e) {
+  bad('1', `profiles/web/package.json 无法解析: ${e.message}`);
+}
+
 if (pkg) {
   const deps = pkg.dependencies ?? {};
   const bundles = pkg.dsh?.profile?.bundles ?? [];
-  ok(`profiles/web/package.json 解析成功（${Object.keys(deps).length} 依赖 / ${bundles.length} bundles）`);
+  ok('1', `profiles/web/package.json 解析成功（${Object.keys(deps).length} 依赖 / ${bundles.length} bundles）`);
 
   // 1a. bundles 必须都有来源
   const hostProvided = (n) => n.startsWith('@deepseek-ai/');
   const missing = bundles.filter((b) => !hostProvided(b) && !Object.hasOwn(deps, b));
-  if (missing.length) bad(`bundle 在 dependencies 里没有来源（新机器会加载失败）: ${missing.join(', ')}`);
-  else ok('每个非官方 bundle 都有对应的 dependency');
+  if (missing.length) bad('1a', `bundle 在 dependencies 里没有来源（新机器会加载失败）: ${missing.join(', ')}`);
+  else ok('1a', '每个非官方 bundle 都有对应的 dependency');
 
   // 1b. 退役包
   const retiredFound = Object.keys(deps).filter((d) => RETIRED.has(d));
-  if (retiredFound.length) for (const r of retiredFound) bad(`依赖里含已退役包 ${r}（${RETIRED.get(r)}）`);
-  else ok('依赖里没有已退役的包');
+  if (retiredFound.length) for (const r of retiredFound) bad('1b', `依赖里含已退役包 ${r}（${RETIRED.get(r)}）`);
+  else ok('1b', '依赖里没有已退役的包');
 
   // 1c. @snow-the/* 一律浮动引用，不得钉精确版本
   const pinned = Object.entries(deps).filter(([k, v]) => k.startsWith('@snow-the/') && /^\d/.test(String(v)));
-  if (pinned.length) bad(`@snow-the/* 被钉成精确版本（会漂移/过期）: ${pinned.map(([k, v]) => `${k}@${v}`).join(', ')}`);
-  else ok('@snow-the/* 全部使用浮动 github: 引用');
+  if (pinned.length) bad('1c', `@snow-the/* 被钉成精确版本（会漂移/过期）: ${pinned.map(([k, v]) => `${k}@${v}`).join(', ')}`);
+  else ok('1c', '@snow-the/* 全部使用浮动 github: 引用');
 
   // 1d. pnpm.overrides 只允许用来【约束第三方传递依赖】，不许用来给宿主打补丁。
   //
   // 这条原先是一刀切"不该有 overrides" —— 那是对 0.1.x 时代 `@deepseek-ai/dsh-agent`
   // 那类【宿主补丁】的反应。2026-10-18 出现了合法用法：
-  //   @linxin666/dsh-web-all@0.4.6 的内部有 4 个子包写成 `^0.4.6`，会浮动到 0.4.7，
-  //   而 0.4.7 要求宿主 >=0.2.1-rc.2 —— 在 0.2.0-rc.2 上整组装不上（宿主拒绝并回滚）。
-  //   把它们钉在 0.4.6 只能靠 overrides。
+  //   @linxin666/dsh-web-all@0.4.x 的内部有 4 个子包写成 `^0.4.x`，会浮动到下一代，
+  //   而下一代要求宿主 >=0.2.1-rc.2 —— 在旧宿主上整组装不上（宿主拒绝并回滚）。
+  //   把它们钉死只能靠 overrides。
   // 所以规则收窄到它真正想防的东西：不许覆盖 @deepseek-ai/*。
   const overrides = pkg.pnpm?.overrides ?? {};
   const hostOverrides = Object.keys(overrides).filter((k) => k.startsWith('@deepseek-ai/'));
   if (hostOverrides.length) {
-    bad(`pnpm.overrides 覆盖了宿主包（0.1.x 时代的做法，在 0.2.x 上会打架）: ${hostOverrides.join(', ')}`);
+    bad('1d', `pnpm.overrides 覆盖了宿主包（0.1.x 时代的做法，在 0.2.x 上会打架）: ${hostOverrides.join(', ')}`);
   } else if (Object.keys(overrides).length) {
-    ok(`pnpm.overrides 只约束第三方传递依赖（${Object.keys(overrides).length} 条），未碰宿主包`);
-  } else ok('没有 pnpm.overrides');
+    ok('1d', `pnpm.overrides 只约束第三方传递依赖（${Object.keys(overrides).length} 条），未碰宿主包`);
+  } else ok('1d', '没有 pnpm.overrides');
 
   // 1e. patchReload
-  if (pkg.dsh?.profile?.patchReload !== 'live') note('dsh.profile.patchReload 未设为 "live"');
+  if (pkg.dsh?.profile?.patchReload !== 'live') note('1e', 'dsh.profile.patchReload 未设为 "live"');
+  else ok('1e', 'dsh.profile.patchReload 为 "live"');
 
   // 1f. 宿主世代耦合的第三方包必须【精确钉版本】，不能浮动。
   //
@@ -97,36 +149,60 @@ if (pkg) {
   // 而且 ^ 和 ~ 在这里都救不了：对 0.x.y 版本两者等价，都是 >=0.12.2 <0.13.0，
   // 都包含 0.12.4。只能精确钉。
   //
-  // 我们自己的机器没暴露它，因为本机 lockfile 早就钉在 0.12.2 了 —— 只有全新安装会中招，
+  // 我们自己的机器没暴露它，因为本机 lockfile 早就钉在旧版本了 —— 只有全新安装会中招，
   // 也就是只有"新机器"会中招。这正是本模板存在的理由。
+  //
+  // 2026-10-19 更新：这条规则的价值被再次证实。宿主 0.2.1-rc.2 发布后，
+  // commandcode 先发 0.14.0（只认 0.2.1-rc.2），1.5 小时后又发 0.14.1 补成双支持；
+  // @linxin666/* 的 0.4.7 则整个 19 个子包都要求 >=0.2.1-rc.2。
+  // 浮动引用会在这些发布窗口里随机炸掉全新安装。
   const HOST_COUPLED = new Map([
-    ['@mars-sea/dsh-commandcode-provider', '0.12.4 把 peer 从 dsh-llm=0.2.0-rc.2 换成 0.2.1-alpha.1（下一代宿主）。^/~ 对 0.x.y 等价，都拦不住，必须精确钉。0.13.4 是 0.2.0-rc.2 上仍被接受的最高版。'],
-    ['@linxin666/dsh-web-all', '0.4.7 把 peer 改成 >=0.2.1-rc.2；0.4.6 是 >=0.2.0-rc.2。浮动到 0.4.7 会在 0.2.0-rc.2 上被拒绝。另注：它内部的 4 个子包写成 ^0.4.6，需要靠 pnpm.overrides 一并钉住。'],
-    ['@linxin666/dsh-session-archive', '同上：0.4.6 可用，0.4.7 要求 >=0.2.1-rc.2。'],
+    ['@mars-sea/dsh-commandcode-provider', '版本表按宿主世代分段：0.12.2/0.12.3 认 0.2.0-rc.2，0.12.4 跳到 0.2.1-alpha.1，0.14.0 只认 0.2.1-rc.2，0.14.1+ 才双支持。^ 和 ~ 对 0.x.y 等价，都拦不住，必须精确钉。'],
+    ['@linxin666/dsh-web-all', '0.4.7 把全部 19 个子包的 peer 改成 >=0.2.1-rc.2；0.4.6 及以前是 >=0.2.0-rc.2。另注：它内部有 4 个子包写成 caret，需要靠 pnpm.overrides 一并钉住。'],
+    ['@linxin666/dsh-session-archive', '同上：0.4.7 要求 >=0.2.1-rc.2，0.4.6 是 >=0.2.0-rc.2。'],
   ]);
   {
     const drifted = [];
+    let pinnedCount = 0;
     for (const [name, why] of HOST_COUPLED) {
       const v = deps[name];
       if (v === undefined) continue;                       // 没装就不管
       if (!/^\d+\.\d+\.\d+$/.test(String(v))) drifted.push(`${name}="${v}"（${why}）`);
+      else pinnedCount++;
     }
-    if (drifted.length) bad(`宿主世代耦合的包被写成浮动范围（全新安装会被宿主门禁拒绝）: ${drifted.join('; ')}`);
-    else ok(`${HOST_COUPLED.size} 个宿主世代耦合的包都已精确钉版本`);
+    if (drifted.length) bad('1f', `宿主世代耦合的包被写成浮动范围（全新安装会被宿主门禁拒绝）: ${drifted.join('; ')}`);
+    else ok('1f', `${pinnedCount} 个宿主世代耦合的包都已精确钉版本`);
   }
+
+  // 1g. 宿主自有的 @deepseek-ai/* 不得再作为 profile 依赖装一份。
+  //
+  // 2026-10-19 实测：宿主自己的 node_modules 里带了 305 个 @deepseek-ai/* 包，
+  // 含 dsh-base / dsh-web-app / dsh-mcp-client / dsh-experimental-agent-team-profile。
+  // 在 profile 里再钉一份 = 同一个插件两个副本：宿主升级后 profile 那份会静默留在旧版本，
+  // 而且两份都注册同一批服务。这是典型的"重复所有者"。
+  //
+  // 在隔离 profile 上做过对照实验：把 dsh-mcp-client 与
+  // dsh-experimental-agent-team-profile 从 dependencies 里删掉后重新安装，
+  //   dump-config: exit 0，stderr 0 字节，loader 行 348（与删除前完全一致）
+  //   启动: 6s，HTTP 200，__DSH_BOOT__=true，49,360 字节（与删除前完全一致）
+  // 所以它们纯属重复；bundles 里保留即可，宿主会解析。
+  const hostOwned = Object.keys(deps).filter((d) => d.startsWith('@deepseek-ai/'));
+  if (hostOwned.length) {
+    bad('1g', `profile 依赖里含宿主自有包（与宿主自带的副本重复，宿主升级后会滞留旧版本）: ${hostOwned.join(', ')}。它们由宿主提供：从 dependencies 删掉，bundles 里保留即可`);
+  } else ok('1g', '没有重复声明宿主自有的 @deepseek-ai/* 包');
 }
 
 // ---------- 2. allowBuilds 与依赖对齐 ----------
 const wsPath = path.join(PROFILE, 'pnpm-workspace.yaml');
 const ws = read(wsPath);
-if (!ws) bad('profiles/web/pnpm-workspace.yaml 缺失');
+const allowed = new Set();
+if (!ws) bad('2', 'profiles/web/pnpm-workspace.yaml 缺失');
 else {
   // 收集 allowBuilds 的键。
   // 注意：引号键或裸键都要支持，且**引号键里允许含冒号** —— hash 形式的键长这样：
   //   "@snow-the/dsh-search@https://codeload.github.com/.../tar.gz/<sha>": true
   // 早先的写法用 [^":]+ 排除冒号，导致这类键一条都收集不到，"排除 hash 键"的断言因此形同虚设
   // （由 check-template.selftest.mjs 的变异用例抓出）。
-  const allowed = new Set();
   let inBlock = false;
   for (const line of ws.split(/\r?\n/)) {
     if (/^allowBuilds:\s*$/.test(line)) { inBlock = true; continue; }
@@ -136,28 +212,29 @@ else {
       if (m) allowed.add(m[1] ?? m[2].trim());
     }
   }
-  ok(`pnpm-workspace.yaml allowBuilds 解析出 ${allowed.size} 条`);
+  ok('2', `pnpm-workspace.yaml allowBuilds 解析出 ${allowed.size} 条`);
 
   // 2a. 每个 git/url 形式的依赖都必须被放行 —— 缺条目会让全新安装直接失败
   const gitDeps = Object.entries(pkg?.dependencies ?? {}).filter(([, v]) => /^(github:|git\+|https?:)/.test(String(v)));
   const notAllowed = gitDeps.filter(([k]) => !allowed.has(k)).map(([k]) => k);
-  if (notAllowed.length) bad(`git 依赖没有 allowBuilds 条目（全新安装会 ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED）: ${notAllowed.join(', ')}`);
-  else ok(`全部 ${gitDeps.length} 个 git 依赖都已 allowBuilds 放行`);
+  if (notAllowed.length) bad('2a', `git 依赖没有 allowBuilds 条目（全新安装会 ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED）: ${notAllowed.join(', ')}`);
+  else ok('2a', `全部 ${gitDeps.length} 个 git 依赖都已 allowBuilds 放行`);
 
   // 2b. hash 形式的键是某一次安装的产物，必然过期
   const hashed = [...allowed].filter((k) => k.includes('@https://'));
-  if (hashed.length) bad(`allowBuilds 含 hash 形式的键（某次安装的产物，会过期）: ${hashed.length} 条，例如 ${hashed[0]}`);
-  else ok('allowBuilds 不含 hash 形式的键');
+  if (hashed.length) bad('2b', `allowBuilds 含 hash 形式的键（某次安装的产物，会过期）: ${hashed.length} 条，例如 ${hashed[0]}`);
+  else ok('2b', 'allowBuilds 不含 hash 形式的键');
 
   // 2c. 空 sha
   const emptySha = [...allowed].filter((k) => /tar\.gz\/$/.test(k));
-  if (emptySha.length) bad(`allowBuilds 含 sha 为空的坏条目: ${emptySha.join(', ')}`);
+  if (emptySha.length) bad('2c', `allowBuilds 含 sha 为空的坏条目: ${emptySha.join(', ')}`);
+  else ok('2c', 'allowBuilds 不含 sha 为空的条目');
 }
 
 // ---------- 3. patch 层 ----------
 const patchPath = path.join(PROFILE, 'cordis.patch.yml');
 const patch = read(patchPath);
-if (!patch) bad('profiles/web/cordis.patch.yml 缺失');
+if (!patch) bad('3', 'profiles/web/cordis.patch.yml 缺失');
 else {
   // 复刻 dsh-plugin-doctor 的 doctor_patch 解析模型（一个文件即一张 row 列表；
   // `- id: x` 直接形式与 `- insert:` 包裹形式都声明 entry；带 name 的才是声明）。
@@ -180,22 +257,23 @@ else {
   const byId = new Map();
   for (const d of decls) { const l = byId.get(d.id) ?? []; l.push(d); byId.set(d.id, l); }
   const dupes = [...byId].filter(([, l]) => l.length > 1);
-  if (dupes.length) bad(`cordis.patch.yml 里有重复声明（后者的 options 会覆盖前者）: ${dupes.map(([id, l]) => `${id} @${l.map((x) => ':' + x.line).join(',')}`).join('; ')}`);
-  else ok(`cordis.patch.yml 解析出 ${decls.length} 条声明，无重复`);
+  if (dupes.length) bad('3', `cordis.patch.yml 里有重复声明（后者的 options 会覆盖前者）: ${dupes.map(([id, l]) => `${id} @${l.map((x) => ':' + x.line).join(',')}`).join('; ')}`);
+  else ok('3', `cordis.patch.yml 解析出 ${decls.length} 条声明，无重复`);
 }
 
 // ---------- 4. cordis.yml 必须是空列表 ----------
 const cordisPath = path.join(PROFILE, 'cordis.yml');
 const cordis = read(cordisPath);
-if (cordis === null) bad('profiles/web/cordis.yml 缺失');
-else if (!/^\s*\[\s*\]\s*$/m.test(cordis.replace(/(^|\s)#.*$/gm, ''))) bad('cordis.yml 不是空列表 `[]`（profile 根应保持为空，配置写在 cordis.patch.yml）');
-else ok('cordis.yml 是空列表');
+if (cordis === null) bad('4', 'profiles/web/cordis.yml 缺失');
+else if (!/^\s*\[\s*\]\s*$/m.test(cordis.replace(/(^|\s)#.*$/gm, ''))) bad('4', 'cordis.yml 不是空列表 `[]`（profile 根应保持为空，配置写在 cordis.patch.yml）');
+else ok('4', 'cordis.yml 是空列表');
 
 // ---------- 5. setup 脚本存在 ----------
-for (const f of ['setup.ps1', 'setup.sh']) {
-  if (!fs.existsSync(path.join(ROOT, f))) bad(`${f} 缺失`);
+{
+  const miss = ['setup.ps1', 'setup.sh'].filter((f) => !fs.existsSync(path.join(ROOT, f)));
+  if (miss.length) bad('5', `${miss.join(' / ')} 缺失`);
+  else ok('5', 'setup.ps1 / setup.sh 都在');
 }
-ok('setup.ps1 / setup.sh 都在');
 
 // 5a. 含非 ASCII 的 .ps1 必须有 UTF-8 BOM。
 // 这不是理论问题：2026-10-04 在一台笔电（Windows 自带的 PowerShell 5.1）上实测，
@@ -213,7 +291,7 @@ function walkPs1(dir, out = []) {
   return out;
 }
 {
-  let checked = 0;
+  let checked = 0, offenders = 0;
   for (const p of walkPs1(ROOT)) {
     checked++;
     const buf = fs.readFileSync(p);
@@ -221,10 +299,11 @@ function walkPs1(dir, out = []) {
     const hasBom = buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf;
     const nonAscii = buf.some((b) => b > 127);
     if (nonAscii && !hasBom) {
-      bad(`${rel} 含非 ASCII 但缺 UTF-8 BOM —— Windows PowerShell 5.1 会按 ANSI 码页解码，中文乱码导致整个文件解析失败、一行都不执行。修: node scripts/fix-ps1-bom.mjs`);
+      offenders++;
+      bad('5a', `${rel} 含非 ASCII 但缺 UTF-8 BOM —— Windows PowerShell 5.1 会按 ANSI 码页解码，中文乱码导致整个文件解析失败、一行都不执行。修: node scripts/fix-ps1-bom.mjs`);
     }
   }
-  if (checked && !fails.some((f) => f.includes('BOM'))) ok(`${checked} 个 .ps1 的编码在 PowerShell 5.1 下可解析`);
+  if (!offenders) ok('5a', `${checked} 个 .ps1 的编码在 PowerShell 5.1 下可解析`);
 }
 
 // 5b. setup.ps1 不得用【裸 Get-Content】读文件。
@@ -234,7 +313,8 @@ function walkPs1(dir, out = []) {
 // 冒烟测试整个崩掉。必须走 [System.IO.File]::ReadAllText($p, [Text.Encoding]::UTF8)。
 {
   const p = path.join(ROOT, 'setup.ps1');
-  if (fs.existsSync(p)) {
+  if (!fs.existsSync(p)) note('5b', 'setup.ps1 不存在，跳过裸 Get-Content 检查');
+  else {
     const offenders = [];
     fs.readFileSync(p, 'utf8').split(/\r?\n/).forEach((line, i) => {
       const code = line.replace(/(^|\s)#.*$/, '');          // 去掉行尾注释
@@ -243,15 +323,27 @@ function walkPs1(dir, out = []) {
       }
     });
     if (offenders.length) {
-      bad(`setup.ps1 用了裸 Get-Content（PS 5.1 按 ANSI 解码，无 BOM 的 UTF-8 JSON 会解析失败）: ${offenders.join(', ')}。改用 [System.IO.File]::ReadAllText($p,[Text.Encoding]::UTF8)`);
-    } else ok('setup.ps1 没有裸 Get-Content（PS 5.1 下读文件是安全的）');
+      bad('5b', `setup.ps1 用了裸 Get-Content（PS 5.1 按 ANSI 解码，无 BOM 的 UTF-8 JSON 会解析失败）: ${offenders.join(', ')}。改用 [System.IO.File]::ReadAllText($p,[Text.Encoding]::UTF8)`);
+    } else ok('5b', 'setup.ps1 没有裸 Get-Content（PS 5.1 下读文件是安全的）');
+  }
+}
+
+// ---------- 6. 自证：登记过的检查必须全部真的执行过 ----------
+// 这一条防的是"规则静默不触发"：分支改动让某条检查再也不运行，
+// 而它仍然在 CHECKS 里、仍然出现在文档里 —— 那比没有这条检查更危险。
+{
+  const unhit = Object.keys(CHECKS).filter((id) => !hit.has(id));
+  if (unhit.length) {
+    fails.push({ id: '6', m: `登记过但本次未执行（代码与清单已漂移）: ${unhit.map((id) => `${id}(${CHECKS[id]})`).join(', ')}` });
+  } else {
+    passes.push({ id: '6', m: `${Object.keys(CHECKS).length} 条登记的检查全部执行过` });
   }
 }
 
 // ---------- 输出 ----------
 console.log('dsh-setup 模板一致性检查\n');
-for (const p of passes) console.log(`  ✓ ${p}`);
-for (const w of warn) console.log(`  · ${w}`);
-for (const f of fails) console.log(`  ✗ ${f}`);
+for (const p of passes) console.log(`  ✓ [${p.id}] ${p.m}`);
+for (const w of warn) console.log(`  · [${w.id}] ${w.m}`);
+for (const f of fails) console.log(`  ✗ [${f.id}] ${f.m}`);
 console.log(`\n  ${fails.length === 0 ? '通过' : '失败'}: ${passes.length} 项通过, ${fails.length} 项失败, ${warn.length} 项提示`);
 process.exit(fails.length ? 1 : 0);
