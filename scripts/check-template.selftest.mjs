@@ -40,6 +40,7 @@ function scaffold() {
     'profiles/web/cordis.yml',
     'setup.ps1',
     'setup.sh',
+    'README.md',
   ]) {
     fs.copyFileSync(path.join(ROOT, rel), path.join(dst, rel));
   }
@@ -216,6 +217,17 @@ const cases = [
     mutate: (d) => {
       const p = path.join(d, 'setup.ps1');
       fs.appendFileSync(p, '\n$probe = Get-Content -Raw "x.json" | ConvertFrom-Json\n');
+    },
+  },
+  // ---- 7: 文档与代码同步 ----
+  {
+    // 2026-10-19 实况：README 的文件树漏了 4 个脚本，还照着旧结构写。
+    label: 'README 的文件树漏掉了一个脚本',
+    expectFail: true,
+    expectId: '7',
+    mutate: (d) => {
+      const p = path.join(d, 'README.md');
+      fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace(/check-template\.mjs/g, 'check-template-OLD.mjs'));
     },
   },
   // ---- 6: 自证机制本身 ----

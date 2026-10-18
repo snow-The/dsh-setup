@@ -30,10 +30,10 @@
   },
   "pnpm": {
     "overrides": {
-      "@linxin666/dsh-pet": "0.4.7",
-      "@linxin666/dsh-client-ui-skin-center": "0.4.7",
+      "@linxin666/dsh-client-ui-community-plugins": "0.4.7",
       "@linxin666/dsh-client-ui-preset-center": "0.4.7",
-      "@linxin666/dsh-client-ui-community-plugins": "0.4.7"
+      "@linxin666/dsh-client-ui-skin-center": "0.4.7",
+      "@linxin666/dsh-pet": "0.4.7"
     }
   },
   "dsh": {

@@ -50,6 +50,7 @@ const CHECKS = {
   '5': 'setup.ps1 / setup.sh 都在',
   '5a': '含非 ASCII 的 .ps1 都带 UTF-8 BOM',
   '5b': 'setup.ps1 不使用裸 Get-Content',
+  '7': 'README 的文件树列出了 scripts/ 下的全部脚本',
 };
 
 if (process.argv.includes('--list-checks')) {
@@ -325,6 +326,25 @@ function walkPs1(dir, out = []) {
     if (offenders.length) {
       bad('5b', `setup.ps1 用了裸 Get-Content（PS 5.1 按 ANSI 解码，无 BOM 的 UTF-8 JSON 会解析失败）: ${offenders.join(', ')}。改用 [System.IO.File]::ReadAllText($p,[Text.Encoding]::UTF8)`);
     } else ok('5b', 'setup.ps1 没有裸 Get-Content（PS 5.1 下读文件是安全的）');
+  }
+}
+
+// ---------- 7. README 的文件树必须列出全部脚本 ----------
+// 2026-10-19 的实况：README 的文件树漏了 4 个脚本（derive-profile、两个自检、e2e-verify、
+// fix-ps1-bom），还是照着旧结构写的。散文与代码脱节是必然的，所以能机械判定的就别靠自觉。
+// 这里只查"列没列出来"，不查散文里那些数字 —— 数数字的检查自己就会烂。
+{
+  const readmePath = path.join(ROOT, 'README.md');
+  const readme = read(readmePath);
+  if (readme === null) bad('7', 'README.md 缺失');
+  else {
+    const scriptsDir = path.join(ROOT, 'scripts');
+    let files = [];
+    try { files = fs.readdirSync(scriptsDir).filter((f) => f.endsWith('.mjs')); } catch { /* 无 scripts 目录 */ }
+    const missingInReadme = files.filter((f) => !readme.includes(f));
+    if (missingInReadme.length) {
+      bad('7', `README 的文件树没列出这些脚本（文档与代码已脱节）: ${missingInReadme.join(', ')}`);
+    } else ok('7', `README 的文件树列出了全部 ${files.length} 个脚本`);
   }
 }
 

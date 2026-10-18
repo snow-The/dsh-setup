@@ -17,18 +17,31 @@ dsh-setup/
 ├── setup.sh                     # Linux/macOS 一键部署
 ├── package.json                 # 仓库自身的工具清单（不含插件依赖，见下）
 ├── scripts/
+│   ├── derive-profile.mjs       # 从 plugins.intent.json 推导生成物
+│   ├── derive-profile.selftest.mjs   # 推导脚本的变异自检
 │   ├── check-template.mjs       # 模板一致性检查（CI 与 setup 都会调）
-│   └── check-template.selftest.mjs  # 检查器的变异自检
+│   ├── check-template.selftest.mjs   # 检查器的变异自检
+│   ├── e2e-verify.mjs           # 端到端校验
+│   └── fix-ps1-bom.mjs          # 给 .ps1 补 UTF-8 BOM
 └── profiles/
-    ├── web/                     # ← 唯一的事实源：dsh web profile 模板
-    │   ├── package.json         # 插件依赖 + bundles 清单
+    ├── web/
+    │   ├── plugins.intent.json  # ← 唯一事实源：要哪些插件、什么版本、按什么顺序挂载
+    │   ├── package.json         # 【生成物】依赖 + bundles，勿手改
     │   ├── cordis.patch.yml     # 用户 patch 层（mslearn MCP 等）
     │   ├── cordis.yml           # profile 根（空列表，勿改）
-    │   └── pnpm-workspace.yaml  # pnpm 配置（allowBuilds 白名单）
+    │   └── pnpm-workspace.yaml  # pnpm 配置（allowBuilds 段是生成物，其余手写）
     └── web.local/               # 站点覆盖层（可选，部署时递归合并到模板之上）
 ```
 
-**`profiles/web/package.json` 是插件清单的唯一事实源。** 根目录的 `package.json` **故意不声明任何插件依赖** —— 早先它是一份「信息副本」，结果是两份各漂各的：那份副本把 `@snow-the/*` 钉在 0.1.x 精确版本，还一直带着 modsearch、vision-toolkit、memory-plugin 这些后来被弃用的包。重复即漂移，所以重复被删掉了。
+**`profiles/web/plugins.intent.json` 是唯一事实源。** 人只维护这一个文件；`package.json` 与 `pnpm-workspace.yaml` 里的 `allowBuilds` 段都由 `scripts/derive-profile.mjs` 从它推导生成，`pnpm test` 的第一项就是断言两者仍然一致 —— 手改生成物必被拒。
+
+为什么要把清单拆成「意图」和「生成物」：此前的 24 条依赖、30 行 allowBuilds、4 条 overrides 全是手工维护的快照，仓库历史就是 20 多条 `fix`/`sync`/`chore`/`bump` —— 每处腐化都被单独记住，没有任何一处能被整体验证。换成推导后，有三类东西不再是"约定"而是"算出来的"：
+
+- **overrides 不再手写**：脚本去查 `@linxin666/dsh-web-all` 当前版本的 `dependencies`，把其中所有带 `^`/`~` 的子包钉到同一版本。所以那 4 条永远不会过期。
+- **allowBuilds 不再"多列无害"**：规则是 `github:`/`file:` 依赖 ∪ 声明了构建脚本的 npm 依赖 ∪ 显式声明的传递构建依赖。旧写法把全部 24 个依赖都列上，理由是"多列无害"——那不是理由，是没人算过。算完发现其中 4 个纯 npm 包根本没有构建脚本。
+- **装了却没挂载** 会被直接判失败（每个依赖都必须出现在 `bundleOrder` 里）。
+
+根目录的 `package.json` 仍然**故意不声明任何插件依赖** —— 早先它是一份「信息副本」，结果是两份各漂各的：那份副本把 `@snow-the/*` 钉在 0.1.x 精确版本，还一直带着 modsearch、vision-toolkit、memory-plugin 这些后来被弃用的包。重复即漂移，所以重复被删掉了。
 
 ## 快速开始
 
@@ -166,13 +179,22 @@ dsh web
 任何改动后跑一次：
 
 ```bash
-npm run check                             # = node scripts/check-template.mjs
-node scripts/check-template.selftest.mjs  # 检查器自身的变异自检
+pnpm test        # 四个程序全跑：推导自洽 + 模板自洽 + 两个变异自检
+pnpm derive      # 改完 plugins.intent.json 后重新生成（= derive-profile.mjs --write）
+pnpm check       # 只跑模板一致性检查
+pnpm selftest    # 只跑两个变异自检
 ```
 
-检查器断言 11 件事，包括：每个 bundle 都有依赖来源、没有已退役的包、`@snow-the/*` 没被钉死、没有 `pnpm.overrides`、**每个 git 依赖都有 `allowBuilds` 条目**、`allowBuilds` 不含 hash 形式的过期键、`cordis.patch.yml` 无重复声明、`cordis.yml` 是空列表。
+`pnpm test` 依次跑四个**互相独立**的程序：
 
-**自检用变异测试证明它真的会落闸**：往临时副本里注入 10 种已知腐化（含一个不该失败的对照组），断言每种都被抓到。写这个自检时它当场抓出了检查器自身的一个 bug —— allowBuilds 的键解析不允许冒号，而 hash 形式的键恰好含 `https:`，导致那条断言一直形同虚设。
+1. **`derive-profile.mjs`** —— 断言生成物仍与意图一致。它有 7 条结构断言（宿主层不许重复声明、每个 bundle 都要有来源、每个依赖都必须被挂载、bundleOrder 不许重复、npm 版本必须是精确版本、derivedOverridesFrom 必须指向 npm 依赖、意图里不许有拼错的字段）。
+2. **`check-template.mjs`** —— 17 条语义检查，每条都有稳定 ID（输出里带 `[1f]`）。覆盖：bundle 来源、退役包、`@snow-the/*` 钉版、overrides 只约束第三方、宿主世代耦合包必须精确钉版本、宿主自有包不许重复声明、allowBuilds 与 git 依赖对齐、hash 形式的过期键、`cordis.patch.yml` 重复声明、`cordis.yml` 必须为空、`.ps1` 的 UTF-8 BOM、`setup.ps1` 不许用裸 `Get-Content` …… 运行到最后还会自证**登记过的 17 条本次都真的执行过**（防"规则静默不触发"）。
+3. **`derive-profile.selftest.mjs`** —— 9 个变异用例，断言上面那 7 条断言**每一条都真的会落闸**，包括"手改生成物"必须被抓到。
+4. **`check-template.selftest.mjs`** —— 21 个变异用例，断言 17 条检查**每一条都至少被一个用例覆盖**，并把"登记过但没被执行"这项机制本身也当作一条用例去破坏、断言它会落闸。
+
+两个自检都做**精确归因**：每条变异都声明期望由哪条规则抓到，而不是只看退出码非 0 —— 否则一条变异被别的规则误抓也算通过，那条真正要验的规则就从没被证明过。
+
+写第一个自检时它当场抓出了检查器自身的一个 bug —— allowBuilds 的键解析不允许冒号，而 hash 形式的键恰好含 `https:`，导致那条断言一直形同虚设。写第二个自检时它又抓出了 `[2]` 没有任何用例覆盖、以及自证专用 ID 被误判为"漂移"。**这正是变异自检存在的意义：它会抓出你自己。**
 
 ## 升级
 

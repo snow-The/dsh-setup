@@ -1,0 +1,126 @@
+{
+  "$comment": [
+    "这是 profile 的【意图】——人只维护这个文件。",
+    "package.json 和 pnpm-workspace.yaml 的 allowBuilds 段都由 scripts/derive-profile.mjs 从这里推导生成。",
+    "改插件、改版本、改挂载顺序：只改这里，然后 pnpm run derive。",
+    "不要手改生成物：`pnpm run derive:check` 会在 CI 里断言两者一致，手改必被拒。"
+  ],
+
+  "profileName": "dsh-profile-web",
+  "packageManager": "pnpm@10.14.0",
+  "patchReload": "live",
+
+  "$comment_runtime": [
+    "runtime 是这份 profile 瞄准的宿主世代。它不写进产物，只用于推导期的自检：",
+    "凡是能从 npm 元数据判定 peer 的都在 derive 里核对，判定不了的（github:/file: 依赖）留给宿主门禁。"
+  ],
+  "runtime": "0.2.1-rc.2",
+
+  "$comment_hostBundles": [
+    "由宿主自己提供、不该出现在 dependencies 里的层。",
+    "2026-10-19 实测：宿主 node_modules 里自带 305 个 @deepseek-ai/* 包。",
+    "在 profile 里再装一份 = 同一插件两个副本，宿主升级后 profile 那份会静默滞留旧版本。"
+  ],
+  "hostBundles": [
+    "@deepseek-ai/dsh-base",
+    "@deepseek-ai/dsh-web-app",
+    "@deepseek-ai/dsh-experimental-agent-team-profile"
+  ],
+
+  "$comment_npm": [
+    "npm 上的第三方插件，必须精确钉版本。",
+    "理由：这些包按宿主世代分段发布（0.4.6 认 0.2.0-rc.2，0.4.7 认 0.2.1-rc.2），",
+    "而 ^ 与 ~ 对 0.x.y 完全等价（都是 <0.(x+1).0），拦不住补丁级的世代跳变。",
+    "浮动引用会让全新安装在某个发布窗口里被宿主门禁整组拒绝并回滚。"
+  ],
+  "npm": {
+    "@linxin666/dsh-session-archive": "0.4.7",
+    "@linxin666/dsh-web-all": "0.4.7",
+    "@mars-sea/dsh-commandcode-provider": "0.14.2",
+    "@tt-a1i/archify-dsh": "1.0.0",
+    "dsh-undo-savepoint": "0.4.10",
+    "dshmarket": "1.66.42"
+  },
+
+  "$comment_github": [
+    "自研插件一律走 github: 浮动引用，不钉版本 —— 它们的发布节奏跟着仓库走。",
+    "值写 owner/repo，需要固定时写 owner/repo#ref。"
+  ],
+  "github": {
+    "@snow-the/dsh-acp-memory": "snow-The/dsh-acp-memory",
+    "@snow-the/dsh-browser": "snow-The/dsh-browser",
+    "@snow-the/dsh-busyloop": "snow-The/dsh-busyloop",
+    "@snow-the/dsh-eigenflux": "snow-The/dsh-eigenflux",
+    "@snow-the/dsh-gitkit": "snow-The/dsh-gitkit",
+    "@snow-the/dsh-lib-analyzer": "snow-The/dsh-lib-analyzer",
+    "@snow-the/dsh-notemap": "snow-The/dsh-notemap",
+    "@snow-the/dsh-plugin-doctor": "snow-The/dsh-plugin-doctor",
+    "@snow-the/dsh-plugin-guide": "snow-The/dsh-plugin-guide",
+    "@snow-the/dsh-research-lab": "snow-The/dsh-research-lab",
+    "@snow-the/dsh-search": "snow-The/dsh-search",
+    "@snow-the/dsh-session-handoff": "snow-The/dsh-session-handoff",
+    "@snow-the/dsh-session-repair": "snow-The/dsh-session-repair",
+    "@snow-the/dsh-skill-pack": "snow-The/dsh-skill-pack",
+    "@snow-the/dsh-snapshot": "snow-The/dsh-snapshot",
+    "@snow-the/dsh-w8-sandbox": "snow-The/dsh-w8-sandbox",
+    "aegis": "GanyuanRan/Aegis#v2.13.0",
+    "dsh-ark-plan": "snow-The/dsh-ark-plan"
+  },
+
+  "$comment_derivedOverrides": [
+    "这些包的发布物内部含子包，且子包写成 caret —— 会漂到下一代。",
+    "derive 会去查它某个版本的 dependencies，把其中所有带 ^/~ 的子包钉到同一版本。",
+    "这也解释了为什么这里只需要写包名、不需要写那 4 条 override。"
+  ],
+  "derivedOverridesFrom": [
+    "@linxin666/dsh-web-all"
+  ],
+
+  "$comment_buildDeps": [
+    "传递依赖里需要跑构建脚本的原生包。",
+    "它们不在 dependencies 里，所以推导不出来，必须显式声明。",
+    "目标：git/file 依赖 + 声明了构建脚本的 npm 依赖 + 这里的条目。"
+  ],
+  "buildDeps": [
+    "cloudflared",
+    "cpu-features",
+    "esbuild",
+    "node-pty",
+    "ssh2",
+    "typescript"
+  ],
+
+  "$comment_bundleOrder": [
+    "挂载顺序是人的决定（顺序会影响谁先注册服务），所以完整显式列出，derive 不猜。",
+    "derive 会断言：每一条要么在 hostBundles 里、要么在 dependencies 里有来源，否则直接失败。"
+  ],
+  "bundleOrder": [
+    "@deepseek-ai/dsh-base",
+    "@deepseek-ai/dsh-web-app",
+    "aegis",
+    "@snow-the/dsh-busyloop",
+    "@snow-the/dsh-gitkit",
+    "@snow-the/dsh-snapshot",
+    "@snow-the/dsh-plugin-doctor",
+    "@snow-the/dsh-plugin-guide",
+    "@snow-the/dsh-skill-pack",
+    "@snow-the/dsh-session-handoff",
+    "@snow-the/dsh-session-repair",
+    "@snow-the/dsh-lib-analyzer",
+    "@snow-the/dsh-browser",
+    "@snow-the/dsh-search",
+    "@snow-the/dsh-notemap",
+    "@snow-the/dsh-research-lab",
+    "@snow-the/dsh-acp-memory",
+    "@snow-the/dsh-eigenflux",
+    "@snow-the/dsh-w8-sandbox",
+    "@tt-a1i/archify-dsh",
+    "dsh-undo-savepoint",
+    "dsh-ark-plan",
+    "dshmarket",
+    "@linxin666/dsh-session-archive",
+    "@linxin666/dsh-web-all",
+    "@mars-sea/dsh-commandcode-provider",
+    "@deepseek-ai/dsh-experimental-agent-team-profile"
+  ]
+}
