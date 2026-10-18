@@ -162,6 +162,60 @@ if (-not $SkipSmoke) {
     Write-Host "冒烟测试通过: 所有 bundle 入口就位。" -ForegroundColor Green
 }
 
+# ---------- 7. 装配验证: 让宿主真的解析一遍 profile ----------
+# 第 6 步只证明"入口文件在磁盘上"。它抓不到: patch 行引用了没装的插件、重复声明、
+# 或者宿主在组合配置时发出的任何警告。
+#
+# 这不是理论问题: 2026-10-12 加的一行 MCP 配置写成了 `- id:` 而不是 `- insert:` 包裹,
+# 于是它【整整一周都没有挂载过】, 而磁盘检查完全看不出来 —— 直到对 dump-config 的
+# stderr 做了一次断言才抓到。
+#
+# 判据: `dsh --profile web --dump-config` 的退出码为 0, 且 **stderr 必须完全为空**。
+# 已知的良性输出是启动阶段的 MCP 横幅, 它不出现在 dump-config 里;
+# 如果某个插件在解析阶段往 stderr 打东西, 那本身就该被看见。
+if (-not $SkipSmoke) {
+    Write-Host ""
+    Write-Host "==> 装配验证: dsh --profile web --dump-config (要求 stderr 为空)" -ForegroundColor Cyan
+    $dshSolver = Get-Command dsh -ErrorAction SilentlyContinue
+    if (-not $dshSolver) {
+        Write-Host "未找到 dsh CLI,跳过装配验证(-SkipSmoke 以外的部分已完成)。" -ForegroundColor Yellow
+        Write-Host "建议: npm i -g @deepseek-ai/dsh 后重跑本脚本。" -ForegroundColor Yellow
+    } else {
+        $errLines = New-Object System.Collections.ArrayList
+        $dumpLines = & dsh --profile web --dump-config 2>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                [void]$errLines.Add($_.ToString())
+                return
+            }
+            $_
+        }
+        $dumpCode = $LASTEXITCODE
+        $idCount = @($dumpLines | Where-Object { $_ -match '^\s*-\s*id:' }).Count
+
+        if ($dumpCode -ne 0) {
+            Write-Host "装配验证失败: dsh --dump-config 退出码 $dumpCode" -ForegroundColor Red
+            exit 1
+        }
+        if ($errLines.Count -gt 0) {
+            Write-Host ""
+            Write-Host "装配验证失败: 宿主在解析 profile 时报了 $($errLines.Count) 条 stderr 输出:" -ForegroundColor Red
+            foreach ($l in ($errLines | Select-Object -First 20)) { Write-Host "  [STDERR] $l" -ForegroundColor Red }
+            Write-Host ""
+            Write-Host "常见原因:" -ForegroundColor Yellow
+            Write-Host "  · cordis.patch.yml 里有一行的 id 没有任何声明 —— 要【新建】条目必须用 - insert: 包裹," -ForegroundColor Yellow
+            Write-Host "    裸的 '- id: x' 只能配置已存在的条目(2026-10 就是这样让一行 MCP 一周没生效)。" -ForegroundColor Yellow
+            Write-Host "  · patch 引用的插件没有装进 profile。" -ForegroundColor Yellow
+            Write-Host "上面的 stderr 会指出具体是哪一条。" -ForegroundColor Yellow
+            exit 1
+        }
+        if ($idCount -eq 0) {
+            Write-Host "装配验证失败: dump-config 成功但解析出 0 个 loader 条目 —— 这不是正常状态。" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "装配验证通过: 宿主解析出 $idCount 个 loader 条目, stderr 为空。" -ForegroundColor Green
+    }
+}
+
 # ---------- 8. 完成提示 ----------
 Write-Host ""
 Write-Host "=== 部署完成! ===" -ForegroundColor Green

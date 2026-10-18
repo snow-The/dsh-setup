@@ -61,7 +61,7 @@ cd dsh-setup
 ./setup.sh
 ```
 
-脚本流程：**模板自检 → 远端同步预检 → 备份旧 profile → 复制模板 → 应用 web.local 覆盖 → pnpm install → 冒烟测试 → 兼容性预检**。
+脚本流程：**模板自检 → 远端同步预检 → 备份旧 profile → 复制模板 → 应用 web.local 覆盖 → pnpm install → 冒烟测试（入口文件）→ 装配验证（`dsh --dump-config`）→ 兼容性预检**。
 
 可选参数：`-SkipInstall` / `-SkipSmoke` / `-Force`（Windows，加 `--` 前缀形式在 bash 端同义）。
 
@@ -188,7 +188,7 @@ pnpm selftest    # 只跑两个变异自检
 `pnpm test` 依次跑四个**互相独立**的程序：
 
 1. **`derive-profile.mjs`** —— 断言生成物仍与意图一致。它有 7 条结构断言（宿主层不许重复声明、每个 bundle 都要有来源、每个依赖都必须被挂载、bundleOrder 不许重复、npm 版本必须是精确版本、derivedOverridesFrom 必须指向 npm 依赖、意图里不许有拼错的字段）。
-2. **`check-template.mjs`** —— 17 条语义检查，每条都有稳定 ID（输出里带 `[1f]`）。覆盖：bundle 来源、退役包、`@snow-the/*` 钉版、overrides 只约束第三方、宿主世代耦合包必须精确钉版本、宿主自有包不许重复声明、allowBuilds 与 git 依赖对齐、hash 形式的过期键、`cordis.patch.yml` 重复声明、`cordis.yml` 必须为空、`.ps1` 的 UTF-8 BOM、`setup.ps1` 不许用裸 `Get-Content` …… 运行到最后还会自证**登记过的 17 条本次都真的执行过**（防"规则静默不触发"）。
+2. **`check-template.mjs`** —— 18 条语义检查，每条都有稳定 ID（输出里带 `[1f]`）。覆盖：bundle 来源、退役包、`@snow-the/*` 钉版、overrides 只约束第三方、宿主世代耦合包必须精确钉版本、宿主自有包不许重复声明、allowBuilds 与 git 依赖对齐、hash 形式的过期键、`cordis.patch.yml` 重复声明、`cordis.yml` 必须为空、`.ps1` 的 UTF-8 BOM、`setup.ps1` 不许用裸 `Get-Content`、README 文件树必须列出全部脚本 …… 运行到最后还会自证**登记过的 18 条本次都真的执行过**（防"规则静默不触发"）。
 3. **`derive-profile.selftest.mjs`** —— 9 个变异用例，断言上面那 7 条断言**每一条都真的会落闸**，包括"手改生成物"必须被抓到。
 4. **`check-template.selftest.mjs`** —— 21 个变异用例，断言 17 条检查**每一条都至少被一个用例覆盖**，并把"登记过但没被执行"这项机制本身也当作一条用例去破坏、断言它会落闸。
 
@@ -213,6 +213,7 @@ cd <dsh-setup目录> && .\setup.ps1    # 或 ./setup.sh
 | `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED` | `profiles/web/pnpm-workspace.yaml` 的 `allowBuilds` 缺了某个 git 依赖。跑 `npm run check` 会直接指出来。 |
 | `pnpm install` 提示忽略 build scripts | pnpm 10 默认禁止依赖的 postinstall。模板已放行 `ssh2` / `node-pty` / `cpu-features` / `cloudflared`；新增带原生编译的依赖时记得同步。 |
 | 冒烟测试 `[FAIL]` | 某 bundle 缺可加载入口。先重跑 `pnpm install`；git 依赖需要能访问 GitHub。 |
+| 装配验证 `[STDERR]` | 宿主在解析 profile 时报警告。最常见：`patch: entry "xxx" not found` —— `cordis.patch.yml` 里那行缺了 `- insert:` 包裹（裸 `- id:` 只能配置已存在的条目）。**注意 `dsh --dump-config` 的退出码仍是 0**，所以只查退出码永远抓不到这类问题。确认无误可加 `-SkipSmoke` 跳过。 |
 | 兼容性预检报某插件会被禁用 | 该插件的 peer 范围不满足当前宿主。按提示升级该插件或升级宿主。 |
 | git 依赖 clone 慢/失败 | 需要能访问 GitHub；可配代理。 |
 | 脚本提示「本地与远端不一致」 | 模板可能过期：先 `git pull` 再跑；确认无误可加 `-Force`。 |

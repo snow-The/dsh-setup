@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dsh-setup 一键部署脚本 (Linux / macOS, bash 3.2+)
 # 用法: git clone https://github.com/snow-The/dsh-setup.git; cd dsh-setup; ./setup.sh
-# 流程: 模板自检 → 预检(远端同步) → 备份旧 profile → 复制模板 → 应用 web.local 覆盖 → 安装依赖(含宿主兼容性判定) → 冒烟测试
+# 流程: 模板自检 → 预检(远端同步) → 备份旧 profile → 复制模板 → 应用 web.local 覆盖 → 安装依赖(含宿主兼容性判定) → 冒烟测试(入口文件) → 装配验证(dsh --dump-config)
 # 参数: --skip-install 跳过安装; --skip-smoke 跳过冒烟测试; --force 跳过"远端不同步"/"模板自检失败"的确认
 set -euo pipefail
 
@@ -140,7 +140,54 @@ if [ "$SKIP_SMOKE" != "1" ]; then
   echo "冒烟测试通过: 所有 bundle 入口就位。"
 fi
 
-# ---------- 8. 完成提示 ----------
+# ---------- 8. 装配验证: 让宿主真的解析一遍 profile ----------
+# 第 7 步只证明"入口文件在磁盘上"。它抓不到: patch 行引用了没装的插件、重复声明,
+# 或者宿主在组合配置时发出的任何警告。
+#
+# 这不是理论问题: 2026-10-12 加的一行 MCP 配置写成了 `- id:` 而不是 `- insert:` 包裹,
+# 于是它【整整一周都没有挂载过】, 而磁盘检查完全看不出来。
+#
+# 关键: `dsh --dump-config` 在这种情况下的【退出码仍然是 0】, 只有 stderr 会响。
+# 所以判据必须是 stderr 为空, 不能是退出码。
+if [ "$SKIP_SMOKE" != "1" ]; then
+  echo ""
+  echo "==> 装配验证: dsh --profile web --dump-config (要求 stderr 为空)"
+  if ! command -v dsh >/dev/null 2>&1; then
+    echo "未找到 dsh CLI,跳过装配验证。建议: npm i -g @deepseek-ai/dsh 后重跑本脚本。" >&2
+  else
+    DUMP_OUT="$(mktemp)"
+    DUMP_ERR="$(mktemp)"
+    # set -e 下必须用 `|| DUMP_CODE=$?` 捕获失败，否则脚本会在赋值前就退出。
+    DUMP_CODE=0
+    dsh --profile web --dump-config >"$DUMP_OUT" 2>"$DUMP_ERR" || DUMP_CODE=$?
+    if [ "$DUMP_CODE" -ne 0 ]; then
+      echo "装配验证失败: dsh --dump-config 退出码 $DUMP_CODE" >&2
+      rm -f "$DUMP_OUT" "$DUMP_ERR"
+      exit 1
+    fi
+    if [ -s "$DUMP_ERR" ]; then
+      echo "" >&2
+      echo "装配验证失败: 宿主在解析 profile 时报了警告/错误:" >&2
+      sed 's/^/  [STDERR] /' "$DUMP_ERR" >&2
+      echo "" >&2
+      echo "常见原因:" >&2
+      echo "  · cordis.patch.yml 里有一行的 id 没有任何声明 —— 要【新建】条目必须用 - insert: 包裹," >&2
+      echo "    裸的 '- id: x' 只能配置已存在的条目。" >&2
+      echo "  · patch 引用的插件没有装进 profile。" >&2
+      rm -f "$DUMP_OUT" "$DUMP_ERR"
+      exit 1
+    fi
+    ID_COUNT="$(grep -c '^[[:space:]]*-[[:space:]]*id:' "$DUMP_OUT" || true)"
+    rm -f "$DUMP_OUT" "$DUMP_ERR"
+    if [ "${ID_COUNT:-0}" -eq 0 ]; then
+      echo "装配验证失败: dump-config 成功但解析出 0 个 loader 条目 —— 这不是正常状态。" >&2
+      exit 1
+    fi
+    echo "装配验证通过: 宿主解析出 $ID_COUNT 个 loader 条目, stderr 为空。"
+  fi
+fi
+
+# ---------- 9. 完成提示 ----------
 echo ""
 echo "=== 部署完成! ==="
 echo "1. 启动:  dsh web"
