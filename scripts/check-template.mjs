@@ -51,6 +51,7 @@ const CHECKS = {
   '5a': '含非 ASCII 的 .ps1 都带 UTF-8 BOM',
   '5b': 'setup.ps1 不使用裸 Get-Content',
   '7': 'README 的文件树列出了 scripts/ 下的全部脚本',
+  '8': '第三方门禁盲区记录与模板依赖一致（不陈旧）',
 };
 
 if (process.argv.includes('--list-checks')) {
@@ -346,6 +347,52 @@ function walkPs1(dir, out = []) {
       bad('7', `README 的文件树没列出这些脚本（文档与代码已脱节）: ${missingInReadme.join(', ')}`);
     } else ok('7', `README 的文件树列出了全部 ${files.length} 个脚本`);
   }
+}
+
+// ---------- 8. 第三方门禁盲区记录不能陈旧 ----------
+// 有些第三方包没声明 engines.dsh / peer，或者声明的是 0.2.1 里已删除的包 ——
+// 宿主门禁对它们无从判定，装到哪一代都被接受。这些盲区必须**可查**，
+// 不能只活在一次审计输出里（那跑完就没了，下一个人还得重新发现一遍）。
+//
+// 这条检查只防**记录陈旧**：包被删、版本被改而记录没跟，立刻落闸。
+// 刻意不联网复核第三方现在的元数据 —— 模板自检不该依赖网络，也不该因为它挂了而失败。
+{
+  const gapsPath = path.join(ROOT, 'profiles', 'web', 'third-party-gaps.json');
+  const pkgPath = path.join(ROOT, 'profiles', 'web', 'package.json');
+  const gapsRaw = read(gapsPath);
+  const pkgRaw = read(pkgPath);
+  const problems = [];
+  let count = 0;
+
+  if (gapsRaw === null) problems.push('profiles/web/third-party-gaps.json 缺失 —— 盲区必须有可查的记录');
+  else if (pkgRaw === null) problems.push('profiles/web/package.json 缺失，无法核对');
+  else {
+    let gaps = null;
+    let deps = null;
+    try { gaps = JSON.parse(gapsRaw).gaps; } catch (e) { problems.push(`third-party-gaps.json 不是合法 JSON: ${e.message}`); }
+    try { deps = JSON.parse(pkgRaw).dependencies ?? {}; } catch (e) { problems.push(`package.json 不是合法 JSON: ${e.message}`); }
+
+    if (gaps !== null && deps !== null) {
+      if (!Array.isArray(gaps) || gaps.length === 0) {
+        problems.push('没有任何条目 —— 若盲区确实已消失，请删掉这个文件并撤掉本条检查，不要留空壳');
+      } else {
+        const REQUIRED = ['pkg', 'spec', 'gap', 'effect', 'compensate', 'recorded'];
+        const seen = new Set();
+        for (const g of gaps) {
+          const missing = REQUIRED.filter((k) => typeof g?.[k] !== 'string' || !g[k].trim());
+          if (missing.length) { problems.push(`${g?.pkg ?? '(无包名)'} 缺字段 ${missing.join('/')}`); continue; }
+          if (seen.has(g.pkg)) problems.push(`${g.pkg} 重复登记`);
+          seen.add(g.pkg);
+          if (!(g.pkg in deps)) problems.push(`${g.pkg} 已不在模板依赖里 —— 记录陈旧`);
+          else if (deps[g.pkg] !== g.spec) problems.push(`${g.pkg} 记录 spec=${g.spec} ≠ 模板 ${deps[g.pkg]} —— 记录陈旧`);
+        }
+        count = gaps.length;
+      }
+    }
+  }
+
+  if (problems.length) bad('8', `第三方门禁盲区记录不可用: ${problems.join('; ')}`);
+  else ok('8', `${count} 条第三方门禁盲区记录与模板依赖逐字一致`);
 }
 
 // ---------- 6. 自证：登记过的检查必须全部真的执行过 ----------

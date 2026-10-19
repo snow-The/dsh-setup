@@ -36,7 +36,7 @@
   "npm": {
     "@linxin666/dsh-session-archive": "0.4.7",
     "@linxin666/dsh-web-all": "0.4.7",
-    "@mars-sea/dsh-commandcode-provider": "0.14.2",
+    "@mars-sea/dsh-commandcode-provider": "0.14.3",
     "@tt-a1i/archify-dsh": "1.0.0",
     "dsh-undo-savepoint": "0.4.10",
     "dshmarket": "1.66.42"

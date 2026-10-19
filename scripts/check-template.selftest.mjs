@@ -38,6 +38,7 @@ function scaffold() {
     'profiles/web/pnpm-workspace.yaml',
     'profiles/web/cordis.patch.yml',
     'profiles/web/cordis.yml',
+    'profiles/web/third-party-gaps.json',
     'setup.ps1',
     'setup.sh',
     'README.md',
@@ -228,6 +229,20 @@ const cases = [
     mutate: (d) => {
       const p = path.join(d, 'README.md');
       fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace(/check-template\.mjs/g, 'check-template-OLD.mjs'));
+    },
+  },
+  // ---- 8: 第三方门禁盲区记录 ----
+  {
+    // 盲区记录里写着某个包的 spec，但模板依赖被改过而记录没跟 —— 记录与事实脱节。
+    // 这类陈旧比"没有记录"更危险：它看起来是查过的。
+    label: '第三方门禁盲区记录的 spec 与模板依赖脱节',
+    expectFail: true,
+    expectId: '8',
+    mutate: (d) => {
+      const p = path.join(d, 'profiles', 'web', 'third-party-gaps.json');
+      const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+      j.gaps[0].spec = '9.9.9';
+      fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
     },
   },
   // ---- 6: 自证机制本身 ----

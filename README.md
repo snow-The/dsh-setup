@@ -39,6 +39,7 @@ dsh-setup/
     │   ├── package.json         # 【生成物】依赖 + bundles，勿手改
     │   ├── cordis.patch.yml     # 用户 patch 层（mslearn MCP 等）
     │   ├── cordis.yml           # profile 根（空列表，勿改）
+    │   ├── third-party-gaps.json # 第三方「门禁无从判定」的记录（check-template [8] 校验它与依赖一致）
     │   └── pnpm-workspace.yaml  # pnpm 配置（allowBuilds 段是生成物，其余手写）
     └── web.local/               # 站点覆盖层（可选，部署时递归合并到模板之上）
 ```
@@ -251,7 +252,7 @@ node scripts/plugin-load-check.mjs --profile web --host /path/to/host/node_modul
 `pnpm test` 依次跑四个**互相独立**的程序：
 
 1. **`derive-profile.mjs`** —— 断言生成物仍与意图一致。它断言的都是结构性质（宿主层不许重复声明、每个 bundle 都要有来源、每个依赖都必须被挂载、bundleOrder 不许重复、npm 版本必须是精确版本、derivedOverridesFrom 必须指向 npm 依赖、意图里不许有拼错的字段）。
-2. **`check-template.mjs`** —— 语义检查，每条都有稳定 ID（输出里带 `[1f]`）。权威清单用 `node scripts/check-template.mjs --list-checks` 取，**散文里不写条数** —— 写了就会漂，这是本仓库反复验证过的。覆盖：bundle 来源、退役包、`@snow-the/*` 钉版、overrides 只约束第三方、宿主世代耦合包必须精确钉版本、宿主自有包不许重复声明、allowBuilds 与 git 依赖对齐、hash 形式的过期键、`cordis.patch.yml` 重复声明、`cordis.yml` 必须为空、`.ps1` 的 UTF-8 BOM、`setup.ps1` 不许用裸 `Get-Content`、README 文件树必须列出全部脚本 …… 运行到最后还会自证**登记过的检查本次都真的执行过**（防"规则静默不触发"）。
+2. **`check-template.mjs`** —— 语义检查，每条都有稳定 ID（输出里带 `[1f]`）。权威清单用 `node scripts/check-template.mjs --list-checks` 取，**散文里不写条数** —— 写了就会漂，这是本仓库反复验证过的。覆盖：bundle 来源、退役包、`@snow-the/*` 钉版、overrides 只约束第三方、宿主世代耦合包必须精确钉版本、宿主自有包不许重复声明、allowBuilds 与 git 依赖对齐、hash 形式的过期键、`cordis.patch.yml` 重复声明、`cordis.yml` 必须为空、`.ps1` 的 UTF-8 BOM、`setup.ps1` 不许用裸 `Get-Content`、README 文件树必须列出全部脚本、第三方门禁盲区记录不得陈旧 …… 运行到最后还会自证**登记过的检查本次都真的执行过**（防"规则静默不触发"）。
 3. **`derive-profile.selftest.mjs`** —— 变异用例，断言上面每一条结构断言**都真的会落闸**，包括"手改生成物"必须被抓到。
 4. **`check-template.selftest.mjs`** —— 变异用例，断言每一条检查**都至少被一个用例覆盖**，并把"登记过但没被执行"这项机制本身也当作一条用例去破坏、断言它会落闸。
 

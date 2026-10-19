@@ -1,0 +1,37 @@
+{
+  "$comment": "第三方依赖里「清单元数据不成立」的记录。这份文件存在的理由：宿主门禁靠插件自己的 engines.dsh / peer 声明来判断这一代能不能装，某些第三方包或是没声明、或是声明了已删除的包 —— 门禁对它们无从判定，而审计输出跑完就没了。所以把每一条写成可被 check-template [8] 校验的记录：包名和 spec 必须与模板依赖逐字一致，包被删或版本被改而记录不同步，检查立刻落闸。注意：这条检查只防记录陈旧，不联网复核第三方包现在的元数据 —— 那需要 npm view，刻意不放进模板自检。",
+  "gaps": [
+    {
+      "pkg": "@tt-a1i/archify-dsh",
+      "spec": "1.0.0",
+      "gap": "没有 engines.dsh，也没有 peerDependencies.dsh",
+      "effect": "宿主门禁无从判定 —— 装到任何一代宿主都会被接受",
+      "compensate": "精确钉版本；在 0.2.1-rc.2 上跑过真启动与 17/17 模块加载",
+      "recorded": "2026-10-19"
+    },
+    {
+      "pkg": "aegis",
+      "spec": "github:GanyuanRan/Aegis#v2.13.0",
+      "gap": "没有 engines.dsh，也没有 peerDependencies.dsh",
+      "effect": "宿主门禁无从判定；而且它是 github 源，本条目随 tags 语义变化（git ls-remote 是字典序，不是 semver）",
+      "compensate": "钉 tag 而非浮动分支；在 0.2.1-rc.2 上跑过真启动与 17/17 模块加载",
+      "recorded": "2026-10-19"
+    },
+    {
+      "pkg": "dshmarket",
+      "spec": "1.66.42",
+      "gap": "没有 engines.dsh，也没有 peerDependencies.dsh",
+      "effect": "宿主门禁无从判定 —— 装到任何一代宿主都会被接受",
+      "compensate": "精确钉版本；在 0.2.1-rc.2 上跑过真启动与 17/17 模块加载",
+      "recorded": "2026-10-19"
+    },
+    {
+      "pkg": "@mars-sea/dsh-commandcode-provider",
+      "spec": "0.14.3",
+      "gap": "它有 engines.dsh（0.2.0-rc.2 || 0.2.1-rc.2，门禁能判），但 peerDependencies 仍硬要 @deepseek-ai/dsh-client-ui-slots 与 @deepseek-ai/dsh-client-ui-primitives —— 这两个包在 0.2.1 已删除（实现并入 dsh-client-ui-renderer）",
+      "effect": "peer 不可满足，靠 profile 的 autoInstallPeers:false 才没在安装期炸；0.14.2 与 0.14.3 的 peer/engines 元数据逐字相同，所以升补丁不改变这一点",
+      "compensate": "精确钉版本；同代审计逐条检查它 import 的包在宿主里存在；在 0.2.1-rc.2 上跑过真启动与 17/17 模块加载",
+      "recorded": "2026-10-19"
+    }
+  ]
+}
