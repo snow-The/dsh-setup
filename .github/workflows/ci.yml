@@ -7,46 +7,68 @@ on:
 
 permissions:
   contents: read
-  packages: read
 
 jobs:
-  build-and-test:
+  # ---------------------------------------------------------------------------
+  # 静态判据：推导自洽 + 模板自洽 + 两个变异自检
+  # ---------------------------------------------------------------------------
+  checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # 不要在这里再写 version: —— 那会和 package.json 的 packageManager 撞车，报
+      # "Multiple versions of pnpm specified" 并在安装前就失败。
+      # 2026-10-19 之前这个仓库的 CI 一直是红的，原因就是这一条：
+      # 本机 `pnpm test` 全绿，所以从来没人发现 CI 根本没跑到测试那一步。
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # 仓库根故意不声明插件依赖，这一步只会校验根清单。
+      - name: Install (root manifest only)
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Template self-checks
+        run: pnpm test
+
+  # ---------------------------------------------------------------------------
+  # 真实装配：把模板装成一份 profile，然后真的启动它
+  #
+  # 为什么必须有这一层（2026-10-19 实测）：
+  #   `dsh --dump-config` 只【组合】YAML，不解析模块。注入一条引用不存在的模块的
+  #   insert 声明，dump-config 的 stderr 仍然是 0 行，而真实启动会报
+  #   `failed to import: ERR_MODULE_NOT_FOUND`。
+  # 所以"能装"和"能跑"是两件事，必须分开证明。
+  # ---------------------------------------------------------------------------
+  boot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
 
-      - name: Setup GH Packages auth
-        run: |
-          echo "@snow-the:registry=https://npm.pkg.github.com/" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GH_PAT }}" >> .npmrc
+      - name: Install the host this template targets
+        run: npm install -g @deepseek-ai/dsh@0.2.1-rc.2
 
-      - name: Install
+      - name: Deploy the template into a throwaway DSH_HOME
         run: |
-          if [ ! -f package.json ]; then echo "no package.json, skipping"; exit 0; fi
-          pnpm install --no-frozen-lockfile --config.auto-install-peers=false
+          set -euo pipefail
+          export DSH_HOME="$RUNNER_TEMP/dsh-home"
+          echo "DSH_HOME=$DSH_HOME" >> "$GITHUB_ENV"
+          mkdir -p "$DSH_HOME/profiles/web"
+          cp -a profiles/web/. "$DSH_HOME/profiles/web/"
+          dsh --version
+          # 这一步走宿主自己的兼容性判定，peer 不满足会整组拒绝并回滚。
+          dsh plugin --profile web install
 
-      - name: Build
-        run: |
-          if [ ! -f package.json ]; then echo "no package.json, skipping"; exit 0; fi
-          if node -e "process.exit(require('./package.json').scripts?.build ? 0 : 1)" 2>/dev/null; then
-            pnpm build
-          else
-            echo "no build script, skipping"
-          fi
-
-      - name: Test
-        run: |
-          if [ ! -f package.json ]; then echo "no package.json, skipping"; exit 0; fi
-          if node -e "const s=require('./package.json').scripts?.test||''; process.exit(s && !s.includes('no test specified') ? 0 : 1)" 2>/dev/null; then
-            pnpm test
-          else
-            echo "no real test script, skipping"
-          fi
+      - name: Boot check — prove it assembles and serves
+        run: node scripts/boot-check.mjs --profile web --timeout 300

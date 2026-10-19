@@ -62,8 +62,11 @@ const PORT = await freePort();
 const started = Date.now();
 
 // --no-open：不要弹浏览器。--port：固定到我们挑的空闲端口。
+// detached 在 POSIX 上是为了得到【独立进程组】，否则 process.kill(-pid) 抛 ESRCH，
+// 启动的服务会留在后台占着端口。Windows 走 taskkill /T，不需要 detached。
 const child = spawn(DSH, ['--profile', PROFILE, '--no-open', '--port', String(PORT)], {
   shell: process.platform === 'win32',
+  detached: process.platform !== 'win32',
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 
