@@ -98,8 +98,9 @@ jobs:
       #
       # 注意这里必须显式指定 --host：插件把 @deepseek-ai/* 声明为 peer，自己目录里没有；
       # Node 会一路向上查找，可能命中的是别处一份旧副本（本机就踩过：
-      # ~/.dsh/profiles/node_modules 下躺着一份 dsh-tools@0.1.5-rc.3）。
-      # esm-host-map.mjs 的钩子是【严格】的：映射不到直接报错，不回退。
+      # 不加约束时解析到 npx 缓存里那份 dsh-tools@0.1.5-rc.3，也就是另一个世代）。
+      # host-map.mjs 的钩子是【严格】的：映射不到直接报错，不回退；脚本还会自证
+      # 解析结果确实落在 --host 里，否则退出 2。
       - name: Plugin load check — every plugin entry initialises against the installed host
         run: |
           set -euo pipefail
@@ -110,4 +111,4 @@ jobs:
             HOST_NM="$HOST_NM/@deepseek-ai/dsh/node_modules"
           fi
           echo "host node_modules: $HOST_NM"
-          node --import ./scripts/esm-host-map.mjs ./scripts/plugin-load-check.mjs --profile web --host "$HOST_NM"
+          node scripts/plugin-load-check.mjs --profile web --host "$HOST_NM"

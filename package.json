@@ -1,14 +1,14 @@
 {
   "name": "dsh-setup",
   "private": true,
-  "description": "DSH web profile template — the deployable profile lives in profiles/web/. This root manifest deliberately declares NO plugin dependencies. profiles/web/plugins.intent.json is the single source of intent; profiles/web/package.json and the allowBuilds block in pnpm-workspace.yaml are GENERATED from it by scripts/derive-profile.mjs. `pnpm test` runs three independent programs: (1) derive-profile --check asserts the generated artifacts still match the intent, (2) check-template asserts the template is self-consistent, (3) check-template.selftest mutates the template and asserts every one of check-template's registered checks actually fires — a guard that cannot fail is not a guard.",
+  "description": "DSH web profile template — the deployable profile lives in profiles/web/. This root manifest deliberately declares NO plugin dependencies. profiles/web/plugins.intent.json is the single source of intent; profiles/web/package.json and the allowBuilds block in pnpm-workspace.yaml are GENERATED from it by scripts/derive-profile.mjs. `pnpm test` runs four independent programs: (1) derive-profile --check asserts the generated artifacts still match the intent, (2) check-template asserts the template is self-consistent, (3) derive-profile.selftest mutates the intent and asserts every derive assertion fires, (4) check-template.selftest mutates the template and asserts every one of check-template's registered checks actually fires — a guard that cannot fail is not a guard.",
   "packageManager": "pnpm@10.14.0",
   "scripts": {
     "derive": "node scripts/derive-profile.mjs --write",
     "derive:check": "node scripts/derive-profile.mjs",
     "check": "node scripts/check-template.mjs",
     "boot:check": "node scripts/boot-check.mjs",
-    "load:check": "node --import ./scripts/esm-host-map.mjs ./scripts/plugin-load-check.mjs",
+    "load:check": "node scripts/plugin-load-check.mjs",
     "selftest": "node scripts/derive-profile.selftest.mjs && node scripts/check-template.selftest.mjs",
     "test": "node scripts/derive-profile.mjs && node scripts/check-template.mjs && node scripts/derive-profile.selftest.mjs && node scripts/check-template.selftest.mjs"
   }

@@ -23,8 +23,7 @@ dsh-setup/
 │   ├── check-template.selftest.mjs   # 检查器的变异自检
 │   ├── boot-check.mjs           # 真启动一次 profile，验证装配/服务/无报错
 │   ├── plugin-load-check.mjs    # 在指定宿主的真实包上执行插件入口（严格钉住宿主版本）
-│   ├── esm-host-map.mjs         # 安装解析钩子（配合 node --import）
-│   ├── esm-host-hooks.mjs       # 严格把 @deepseek-ai/* 映射到指定宿主
+│   ├── host-map.mjs             # 把 @deepseek-ai/* 严格钉到指定宿主 + 解析自证
 │   ├── e2e-verify.mjs           # 端到端校验
 │   └── fix-ps1-bom.mjs          # 给 .ps1 补 UTF-8 BOM
 └── profiles/
@@ -220,25 +219,34 @@ pnpm boot:check  # 真启动一次已部署的 profile（需要先 .\setup.ps1 �
 这里有个必须防的陷阱，是实测出来的：
 
 ```
-~/.dsh/profiles/node_modules/@deepseek-ai/dsh-tools   ← 躺着一份 v0.1.5-rc.3
+不加约束时 import 插件入口，解析到的是
+  <npx 缓存>/@deepseek-ai/dsh-tools   v0.1.5-rc.3   ← 另一个世代
 ```
 
 Node 从插件目录向上查找就会命中它。于是"能加载"可能是在**错误的世代**上得出的，
-而且看起来完全正常。所以脚本用 `esm-host-map.mjs` 装一个**严格**解析钩子：
+而且看起来完全正常。所以 `host-map.mjs` 装一个**严格**解析钩子：
 `@deepseek-ai/*` 只能解析到 `--host` 指定的那份，映射不到直接报错、**绝不回退**。
+
+而且这个护栏**自己会撒谎过**，代价记在这里：上一版从 `process.env.HOST_NM` 读宿主路径，
+调用方却是用 `--host` 参数传的 —— 两条通道没接上时钩子静默退化成直通。在 CI 的干净环境里
+它响亮地失败（`Cannot find package '@deepseek-ai/dsh-tools'`），但在本机上它静默落到了
+`v0.1.5-rc.3` 上并报"全过"。同一个缺陷，一处响一处哑。
+
+所以现在的形态是：宿主路径是 `armHostMap()` 的**必选参数**，没有直通这条退化路径；
+并且跑任何插件之前先做**自证** —— `import.meta.resolve` 的结果必须落在 `--host` 目录里，
+否则直接退出 2。自证不是锦上添花，它是本地那次假通过唯一的防线。
 
 ```bash
 # 先给一个宿主 node_modules 的绝对路径（例如一份按目标世代装好的 dsh）
-node --import ./scripts/esm-host-map.mjs ./scripts/plugin-load-check.mjs \
-  --profile web --host /path/to/host/node_modules
+node scripts/plugin-load-check.mjs --profile web --host /path/to/host/node_modules
 ```
 
 `pnpm test` 依次跑四个**互相独立**的程序：
 
-1. **`derive-profile.mjs`** —— 断言生成物仍与意图一致。它有 7 条结构断言（宿主层不许重复声明、每个 bundle 都要有来源、每个依赖都必须被挂载、bundleOrder 不许重复、npm 版本必须是精确版本、derivedOverridesFrom 必须指向 npm 依赖、意图里不许有拼错的字段）。
-2. **`check-template.mjs`** —— 18 条语义检查，每条都有稳定 ID（输出里带 `[1f]`）。覆盖：bundle 来源、退役包、`@snow-the/*` 钉版、overrides 只约束第三方、宿主世代耦合包必须精确钉版本、宿主自有包不许重复声明、allowBuilds 与 git 依赖对齐、hash 形式的过期键、`cordis.patch.yml` 重复声明、`cordis.yml` 必须为空、`.ps1` 的 UTF-8 BOM、`setup.ps1` 不许用裸 `Get-Content`、README 文件树必须列出全部脚本 …… 运行到最后还会自证**登记过的 18 条本次都真的执行过**（防"规则静默不触发"）。
-3. **`derive-profile.selftest.mjs`** —— 9 个变异用例，断言上面那 7 条断言**每一条都真的会落闸**，包括"手改生成物"必须被抓到。
-4. **`check-template.selftest.mjs`** —— 21 个变异用例，断言 17 条检查**每一条都至少被一个用例覆盖**，并把"登记过但没被执行"这项机制本身也当作一条用例去破坏、断言它会落闸。
+1. **`derive-profile.mjs`** —— 断言生成物仍与意图一致。它断言的都是结构性质（宿主层不许重复声明、每个 bundle 都要有来源、每个依赖都必须被挂载、bundleOrder 不许重复、npm 版本必须是精确版本、derivedOverridesFrom 必须指向 npm 依赖、意图里不许有拼错的字段）。
+2. **`check-template.mjs`** —— 语义检查，每条都有稳定 ID（输出里带 `[1f]`）。权威清单用 `node scripts/check-template.mjs --list-checks` 取，**散文里不写条数** —— 写了就会漂，这是本仓库反复验证过的。覆盖：bundle 来源、退役包、`@snow-the/*` 钉版、overrides 只约束第三方、宿主世代耦合包必须精确钉版本、宿主自有包不许重复声明、allowBuilds 与 git 依赖对齐、hash 形式的过期键、`cordis.patch.yml` 重复声明、`cordis.yml` 必须为空、`.ps1` 的 UTF-8 BOM、`setup.ps1` 不许用裸 `Get-Content`、README 文件树必须列出全部脚本 …… 运行到最后还会自证**登记过的检查本次都真的执行过**（防"规则静默不触发"）。
+3. **`derive-profile.selftest.mjs`** —— 变异用例，断言上面每一条结构断言**都真的会落闸**，包括"手改生成物"必须被抓到。
+4. **`check-template.selftest.mjs`** —— 变异用例，断言每一条检查**都至少被一个用例覆盖**，并把"登记过但没被执行"这项机制本身也当作一条用例去破坏、断言它会落闸。
 
 两个自检都做**精确归因**：每条变异都声明期望由哪条规则抓到，而不是只看退出码非 0 —— 否则一条变异被别的规则误抓也算通过，那条真正要验的规则就从没被证明过。
 

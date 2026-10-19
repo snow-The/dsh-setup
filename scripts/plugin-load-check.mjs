@@ -6,20 +6,27 @@
  *   · dump-config 只组合 YAML，不解析模块；
  *   · boot 只能证明宿主起来了，插件可能静默降级；
  *   · 而"直接 import 插件入口"看上去最接近真相，却有一个陷阱：
- *     ~/.dsh/profiles/node_modules 下曾经躺着一份 @deepseek-ai/dsh-tools@0.1.5-rc.3，
- *     Node 向上查找就命中了它 —— 于是"能加载"可能是在【错误的世代】上得出的。
+ *     命令行不加约束时，@deepseek-ai/* 会一路向上查找，在本机命中的是
+ *     <npx 缓存>/@deepseek-ai/dsh-tools v0.1.5-rc.3 —— 另一个世代。
+ *     用 0.1.5 验 0.2.1 的插件，"通过"没有意义。
  *
- * 所以本脚本用 esm-host-map.mjs 装一个【严格】解析钩子：@deepseek-ai/* 只能解析到
- * 指定宿主的 node_modules，映射不到直接报错，绝不回退到查找路径上碰巧存在的副本。
+ * 所以本脚本用 host-map.mjs 把 @deepseek-ai/* 严格钉到 --host 指定的宿主，并且
+ * 在跑任何插件之前先做【自证】：解析结果必须落在那个宿主目录里。映射不到即失败，
+ * 绝不回退到查找路径上碰巧存在的副本。
+ *
+ * 自证为什么必须存在：上一版把宿主路径从环境变量读（而调用方用参数传），两条通道没接上
+ * 时钩子静默直通。CI 干净环境里表现为响亮失败，本机上却表现为"全过"——
+ * 一个会撒谎的护栏。现在没有直通这条路了，自证是第二道锁。
  *
  * 用法：
- *   node --import ./esm-host-map.mjs plugin-load-check.mjs --profile web --host <宿主的 node_modules>
- *   node --import ./esm-host-map.mjs plugin-load-check.mjs --entries a.js b.js --host <...>
+ *   node scripts/plugin-load-check.mjs --profile web --host <宿主的 node_modules>
+ *   node scripts/plugin-load-check.mjs --entries a.js b.js --host <...>
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { pathToFileURL } from 'node:url';
+import { armHostMap, selfProof } from './host-map.mjs';
 
 const argv = process.argv.slice(2);
 const argOf = (name) => { const i = argv.indexOf(`--${name}`); return i >= 0 ? argv[i + 1] : undefined; };
@@ -27,7 +34,15 @@ const argOf = (name) => { const i = argv.indexOf(`--${name}`); return i >= 0 ? a
 const HOST_NM = argOf('host');
 const PROFILE = argOf('profile');
 if (!HOST_NM || !existsSync(HOST_NM)) {
-  console.error('需要 --host <宿主 node_modules 的绝对路径>');
+  console.error('需要 --host <宿主 node_modules 的绝对路径>，且目录必须存在');
+  process.exit(2);
+}
+
+// 武装严格解析钩子 —— 必须在任何 import('@deepseek-ai/*') 之前。
+try {
+  armHostMap(HOST_NM);
+} catch (e) {
+  console.error(`✗ ${e.message}`);
   process.exit(2);
 }
 
@@ -59,7 +74,24 @@ function entriesForProfile(name) {
   return out;
 }
 
-const entries = PROFILE ? entriesForProfile(PROFILE) : argv.filter((a, i) => argv[i - 1] === '--entries' || (a.endsWith('.js') && !a.startsWith('--')));
+let entries;
+try {
+  entries = PROFILE
+    ? entriesForProfile(PROFILE)
+    : argv.filter((a, i) => argv[i - 1] === '--entries' || (a.endsWith('.js') && !a.startsWith('--')));
+} catch (e) {
+  console.error(`✗ ${e.message}`);
+  process.exit(2);
+}
+
+// 自证：宿主包必须解析到 --host 里那一份。没武装/传错目录都会在这里落闸。
+let proven;
+try {
+  proven = selfProof(HOST_NM, '@deepseek-ai/dsh-tools');
+} catch (e) {
+  console.error(`✗ ${e.message}`);
+  process.exit(2);
+}
 
 if (entries.length === 0) {
   console.log('没有找到任何插件入口（这个 profile 里没有 @snow-the/* 插件？）');
@@ -67,6 +99,7 @@ if (entries.length === 0) {
 }
 
 console.log(`宿主实现: ${HOST_NM}`);
+console.log(`自证通过: @deepseek-ai/dsh-tools -> ${decodeURIComponent(new URL(proven).pathname)}`);
 console.log(`待验入口: ${entries.length} 个（严格钉住，映射不到即失败）\n`);
 
 let ok = 0;
