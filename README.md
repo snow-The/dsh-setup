@@ -286,12 +286,17 @@ node scripts/verify-all.mjs --dsh <宿主bin/dsh> --host <宿主>/node_modules -
 
 已实测的两个平台（2026-10-19）：
 
-- **Windows 11** / Node v26.7.0：四层静态 + `boot-check` PASS + `plugin-load-check` 17/17
-- **Debian 13 (trixie)** / Node v26.7.0：四层静态 + `boot-check` PASS（HTTP 200 / 49,515 字节 / `__DSH_BOOT__` / 0 真错误）+ `plugin-load-check` 16/16
+- **Windows 11** / Node v26.7.0 / npm 11.19.0：四层静态 + `boot-check` PASS + `plugin-load-check` 17/17
+- **Arch Linux** / Node v26.4.0 / npm 12.0.1：四层静态 + `boot-check` PASS（HTTP 200 / 49,515 字节 / `__DSH_BOOT__` / 0 真错误）+ `plugin-load-check` 16/16
 
-Linux 那份是在一台**同时跑着生产实例**的机器上做的：私有宿主装进独立目录、`DSH_HOME`
-指向独立目录、服务用临时空闲端口启动 —— 全程没碰 `/usr/local/bin/dsh`，也没碰
-`~/.dsh/profiles/web`。
+不要低估第二台的价值 —— 它**当场抓出了一个只在新环境里出现的缺陷**：npm 12 把
+`npm view <pkg> <field> --json` 的单结果包成数组，旧代码对数组判 `Object.hasOwn` 恒为
+false，于是每个 npm 依赖都被静默判成"没有构建脚本"，生成物安静地少掉六条 `allowBuilds`。
+在 npm 11 的两台机器上永远是绿的。细节见 `scripts/npm-view.mjs` 的头注释。
+
+两次 Linux 验证都是在**有真实负载的机器**上做的（其中一台同机跑着生产实例，另一台跑着
+两个 MC 服务）：私有宿主装进独立目录、`DSH_HOME` 指向独立目录、服务用临时空闲端口启动 ——
+全程没碰系统里的 `dsh`，也没碰 `~/.dsh`。
 
 ## 升级
 
@@ -320,3 +325,4 @@ cd <dsh-setup目录> && .\setup.ps1    # 或 ./setup.sh
 - `node_modules/`、`.dsh-market/` 等由本机生成，不进仓库；
 - git 依赖（`github:snow-The/*`、`github:GanyuanRan/Aegis`）安装时需要能访问 GitHub；
 - profile 把 `packageManager` 钉在 pnpm 10：pnpm 11 改了 `allowBuilds` 的键格式（要求 `name@<tarball-url-with-commit>`），与模板的裸名清单不兼容。
+- `derive-profile.mjs` 会查 npm registry（判断哪些依赖声明了构建脚本、哪些是 caret 子依赖）。没有网络时用 `--offline`：它会跳过这些查询，**只**验证结构与顺序，不保证生成物正确。`npm view` 的输出形状由 `scripts/npm-view.mjs` 规范化 —— npm 12 会把它包成数组，遇到不认识的形状脚本会直接报错，不猜。
