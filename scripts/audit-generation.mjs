@@ -8,7 +8,12 @@
  *   ① 插件解析到 0.1.5-rc.3（来自 profiles/node_modules 里的陈旧 junction 农场），
  *      而宿主是 0.2.1 —— 全绿，因为 API 面结构性兼容。
  *   ② 三个插件的 dsh.client.inject 指向 0.2.1 里已删除的
- *      @deepseek-ai/dsh-client-ui-primitives / -slots —— 客户端静默不挂载。
+ *      @deepseek-ai/dsh-client-ui-primitives / -slots。
+ *      —— 这条最初被我写成"客户端静默不挂载"，是错的。对着加载器源码验过：
+ *      dsh-client-modules/lib/client.js:789 是 `if (dependency !== void 0)`，
+ *      找不到就当没有，消费者照常 arrive。所以它只丢"加载顺序"意图，不会阻止挂载。
+ *      真正会坏的是另一件事：client bundle 把 @deepseek-ai/* 客户端包当模块 require（官方明令禁止）。
+ *      两者现在分开判，见 ②。
  *   ③ 插件的 dsh.compatibility.dshReleases 只写到 0.2.0-rc.2，生态已经 0.2.1。
  *   ④ 代码里 import 的 @deepseek-ai/* 在目标宿主里根本不存在。
  *   ⑤ profile 又装了一份宿主自带的包 —— 同一插件两个副本。
@@ -122,14 +127,38 @@ if (fs.existsSync(NM)) {
       }
       for (const m of info.missingImports) problems.push({ severity: 'hard', text: `import 的包在目标宿主里不存在: ${m}` });
 
-      // ② dsh.client.inject 的每一项都必须是宿主里真实存在的包
+      // ② 客户端声明有两种失效，性质完全不同，必须分开判：
+      //    (a) hard —— client bundle 把 @deepseek-ai/* 客户端包当模块 require。
+      //        官方 plugin 文档明令禁止："Do not require('@deepseek-ai/dsh-client-ui-primitives')
+      //        or load any other Harness Client package as a module"。组件一抛错就整条
+      //        slot 条目变空白（控制台 slot entry crashed in '<slot>'），而且纯 JS 插件没有类型检查兜着。
+      //    (b) soft —— dsh.client.inject 里写了宿主已不存在的包。
+      //        dsh-client-modules/lib/client.js:789 是 `if (dependency !== void 0)`：找不到就当没有，
+      //        消费者照常 arrive。所以它不会阻止挂载，只是那条"加载顺序"意图落空、声明变成假话。
+      const clientEntry = typeof pj.exports?.['./client'] === 'string'
+        ? pj.exports['./client']
+        : pj.exports?.['./client']?.default;
+      const clientFile = typeof clientEntry === 'string' ? path.join(pkgDir, clientEntry) : null;
+      if (clientFile && fs.existsSync(clientFile)) {
+        const src = fs.readFileSync(clientFile, 'utf8');
+        const requireRe = /require\(\s*['"](@deepseek-ai\/[a-z0-9-]+)['"]\s*\)/g;
+        const seen = new Set();
+        let mm;
+        while ((mm = requireRe.exec(src)) !== null) seen.add(mm[1]);
+        for (const n of seen) {
+          if (/dsh-client/.test(n)) {
+            problems.push({ severity: 'hard', text: `client bundle 把 Harness Client 包当模块加载: ${n}（官方禁止；组件抛错会静默清空该 slot 条目）` });
+          }
+        }
+      }
+
       const inject = pj.dsh?.client?.inject;
       if (Array.isArray(inject)) {
         info.clientInject = inject;
         for (const n of inject) {
           if (!HOST_PKGS.has(n)) {
             info.missingInject.push(n);
-            problems.push({ severity: 'hard', text: `dsh.client.inject 指向已不存在的包: ${n} —— 客户端会静默不挂载` });
+            problems.push({ severity: 'soft', text: `dsh.client.inject 指向已不存在的包: ${n} —— 加载器静默跳过该条（client.js:789），只丢加载顺序，不阻止挂载` });
           }
         }
       }
