@@ -8,6 +8,7 @@
     "derive:check": "node scripts/derive-profile.mjs",
     "check": "node scripts/check-template.mjs",
     "boot:check": "node scripts/boot-check.mjs",
+    "load:check": "node --import ./scripts/esm-host-map.mjs ./scripts/plugin-load-check.mjs",
     "selftest": "node scripts/derive-profile.selftest.mjs && node scripts/check-template.selftest.mjs",
     "test": "node scripts/derive-profile.mjs && node scripts/check-template.mjs && node scripts/derive-profile.selftest.mjs && node scripts/check-template.selftest.mjs"
   }

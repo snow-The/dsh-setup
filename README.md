@@ -22,6 +22,9 @@ dsh-setup/
 │   ├── check-template.mjs       # 模板一致性检查（CI 与 setup 都会调）
 │   ├── check-template.selftest.mjs   # 检查器的变异自检
 │   ├── boot-check.mjs           # 真启动一次 profile，验证装配/服务/无报错
+│   ├── plugin-load-check.mjs    # 在指定宿主的真实包上执行插件入口（严格钉住宿主版本）
+│   ├── esm-host-map.mjs         # 安装解析钩子（配合 node --import）
+│   ├── esm-host-hooks.mjs       # 严格把 @deepseek-ai/* 映射到指定宿主
 │   ├── e2e-verify.mjs           # 端到端校验
 │   └── fix-ps1-bom.mjs          # 给 .ps1 补 UTF-8 BOM
 └── profiles/
@@ -207,6 +210,28 @@ pnpm boot:check  # 真启动一次已部署的 profile（需要先 .\setup.ps1 �
 
 已知良性输出（task-board 单实例锁、MCP 启动横幅）在脚本里有**带理由的分类器**，
 不是静默白名单。
+
+### 第三层：`pnpm load:check` —— 在正确的宿主副本上执行插件模块
+
+`boot:check` 证明"宿主带着这堆插件起得来"，但它看不到**插件是否真的按这代宿主的 API 初始化**。
+`plugin-load-check.mjs` 直接 `import` 每个插件入口，让顶层代码（`defineTool(...)` 等）在
+**指定宿主的真实包**上执行一遍。
+
+这里有个必须防的陷阱，是实测出来的：
+
+```
+~/.dsh/profiles/node_modules/@deepseek-ai/dsh-tools   ← 躺着一份 v0.1.5-rc.3
+```
+
+Node 从插件目录向上查找就会命中它。于是"能加载"可能是在**错误的世代**上得出的，
+而且看起来完全正常。所以脚本用 `esm-host-map.mjs` 装一个**严格**解析钩子：
+`@deepseek-ai/*` 只能解析到 `--host` 指定的那份，映射不到直接报错、**绝不回退**。
+
+```bash
+# 先给一个宿主 node_modules 的绝对路径（例如一份按目标世代装好的 dsh）
+node --import ./scripts/esm-host-map.mjs ./scripts/plugin-load-check.mjs \
+  --profile web --host /path/to/host/node_modules
+```
 
 `pnpm test` 依次跑四个**互相独立**的程序：
 
