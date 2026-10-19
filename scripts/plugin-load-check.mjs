@@ -31,10 +31,13 @@ if (!HOST_NM || !existsSync(HOST_NM)) {
   process.exit(2);
 }
 
-/** 从一个 profile 的 node_modules 里枚举所有插件的入口文件。 */
+/** 从一个 profile 的 node_modules 里枚举所有插件的入口文件。
+ *  必须尊重 DSH_HOME —— CI 里 profile 不在 ~/.dsh 下，而是在临时目录。
+ *  写死 os.homedir() 会让 CI 报 "profile 不存在"。 */
 function entriesForProfile(name) {
-  const nm = path.join(os.homedir(), '.dsh', 'profiles', name, 'node_modules');
-  if (!existsSync(nm)) throw new Error(`profile 不存在: ${nm}`);
+  const dshHome = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+  const nm = path.join(dshHome, 'profiles', name, 'node_modules');
+  if (!existsSync(nm)) throw new Error(`profile 不存在: ${nm}（DSH_HOME=${dshHome}）`);
   const out = [];
   for (const scope of readdirSync(nm, { withFileTypes: true })) {
     if (!scope.isDirectory()) continue;
