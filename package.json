@@ -11,7 +11,11 @@
     "load:check": "node scripts/plugin-load-check.mjs",
     "selftest": "node scripts/derive-profile.selftest.mjs && node scripts/check-template.selftest.mjs",
     "verify": "node scripts/verify-all.mjs",
-    "audit": "node scripts/audit-plugins.mjs",
+    "audit": "node scripts/audit-all.mjs",
+    "audit:plugins": "node scripts/audit-plugins.mjs",
+    "audit:generation": "node scripts/audit-generation.mjs",
+    "audit:runtime": "node scripts/audit-runtime.mjs",
+    "audit:logs": "node scripts/audit-logs.mjs",
     "test": "node scripts/derive-profile.mjs && node scripts/check-template.mjs && node scripts/derive-profile.selftest.mjs && node scripts/check-template.selftest.mjs"
   },
   "license": "MIT"

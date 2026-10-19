@@ -216,7 +216,43 @@ if (-not $SkipSmoke) {
     }
 }
 
-# ---------- 8. 完成提示 ----------
+# ---------- 8. 四条审计轴: 依赖 / 同代 / 运行时 / 日志 ----------
+# 第 6、7 步只能证明「文件在盘上、配置能解析」。它们抓不到:
+#   · 插件和宿主不是同一代 —— 0.1.5 的包配 0.2.1 的宿主, 因为 API 面结构性兼容,
+#     全绿, 而且可以绿很久(2026-10-19 实测: 全绿了一整代)。
+#   · 依赖装不回来 (版本被撤、github 源没了)。
+#   · 日志前缀不一致 —— 出事时 grep 一个名字搜不全, 不知道是谁在说话。
+# 四条轴都只在**真问题**上退出 1, 不对建议性提醒失败, 所以可以直接当门禁。
+if (-not $SkipSmoke) {
+    Write-Host ""
+    Write-Host "==> 审计: 依赖 / 同代 / 运行时 / 日志" -ForegroundColor Cyan
+    $auditArgs = @((Join-Path $repoDir "scripts\audit-all.mjs"), "--profile-dir", $profileDir)
+
+    # 「同代」那条轴需要一个宿主 node_modules。装法不同路径不同, 所以试候选而不是猜死;
+    # 找不到就让它跳过并说清楚, 不装作验过了。
+    $dshForAudit = Get-Command dsh -ErrorAction SilentlyContinue
+    $hostNm = $null
+    $hostCands = @()
+    if ($dshForAudit) { $hostCands += (Join-Path (Split-Path $dshForAudit.Source -Parent) "node_modules\@deepseek-ai\dsh\node_modules") }
+    if ($env:APPDATA) { $hostCands += (Join-Path $env:APPDATA "npm\node_modules\@deepseek-ai\dsh\node_modules") }
+    foreach ($c in $hostCands) {
+        if (Test-Path (Join-Path $c "@deepseek-ai\dsh-tools\package.json")) { $hostNm = $c; break }
+    }
+    if ($hostNm) {
+        $auditArgs += @("--host", $hostNm)
+    } else {
+        Write-Host "  找不到全局宿主的 node_modules —— '同代'那条轴会被跳过(其余三条照跑)。" -ForegroundColor DarkGray
+    }
+
+    & node @auditArgs
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ""
+        Write-Host "审计失败: 上面失败的轴就是原因, 各轴输出里带 file:line。" -ForegroundColor Red
+        exit 1
+    }
+}
+
+# ---------- 9. 完成提示 ----------
 Write-Host ""
 Write-Host "=== 部署完成! ===" -ForegroundColor Green
 Write-Host "1. 启动:  dsh web"

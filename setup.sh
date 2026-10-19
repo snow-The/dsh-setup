@@ -187,7 +187,43 @@ if [ "$SKIP_SMOKE" != "1" ]; then
   fi
 fi
 
-# ---------- 9. 完成提示 ----------
+# ---------- 9. 四条审计轴: 依赖 / 同代 / 运行时 / 日志 ----------
+# 第 7、8 步只能证明「文件在盘上、配置能解析」。它们抓不到:
+#   · 插件和宿主不是同一代 —— 0.1.5 的包配 0.2.1 的宿主, 因为 API 面结构性兼容,
+#     全绿, 而且可以绿很久(2026-10-19 实测: 全绿了一整代)。
+#   · 依赖装不回来 (版本被撤、github 源没了)。
+#   · 日志前缀不一致 —— 出事时 grep 一个名字搜不全, 不知道是谁在说话。
+# 四条轴都只在**真问题**上退出 1, 对建议性提醒不失败, 所以可以直接当门禁。
+if [ "$SKIP_SMOKE" != "1" ]; then
+  echo ""
+  echo "==> 审计: 依赖 / 同代 / 运行时 / 日志"
+  AUDIT_ARGS=("$REPO_DIR/scripts/audit-all.mjs" --profile-dir "$PROFILE_DIR")
+
+  # 「同代」那条轴需要宿主 node_modules。装法不同路径不同, 试候选而不是猜死;
+  # 找不到就让那条轴跳过并说清楚, 不装作验过了。
+  HOST_NM=""
+  NPM_ROOT="$(npm root -g 2>/dev/null || true)"
+  HOST_CANDS=()
+  [ -n "$NPM_ROOT" ] && HOST_CANDS+=("$NPM_ROOT/@deepseek-ai/dsh/node_modules")
+  HOST_CANDS+=("/usr/lib/node_modules/@deepseek-ai/dsh/node_modules")
+  HOST_CANDS+=("/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules")
+  for c in "${HOST_CANDS[@]}"; do
+    if [ -f "$c/@deepseek-ai/dsh-tools/package.json" ]; then HOST_NM="$c"; break; fi
+  done
+  if [ -n "$HOST_NM" ]; then
+    AUDIT_ARGS+=(--host "$HOST_NM")
+  else
+    echo "  找不到全局宿主的 node_modules —— '同代'那条轴会被跳过(其余三条照跑)。"
+  fi
+
+  if ! node "${AUDIT_ARGS[@]}"; then
+    echo "" >&2
+    echo "审计失败: 上面失败的轴就是原因, 各轴输出里带 file:line。" >&2
+    exit 1
+  fi
+fi
+
+# ---------- 10. 完成提示 ----------
 echo ""
 echo "=== 部署完成! ==="
 echo "1. 启动:  dsh web"
