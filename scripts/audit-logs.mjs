@@ -85,8 +85,18 @@ for (const scope of scopes) {
 
         // 只扫字面量会漏掉 `console.log("[x] apply called, ctx.web =", !!ctx.web)` ——
         // 值在第二个参数里，字符串本身看着很干净。第一版的检查器就是这么漏掉的。
-        const afterQuote = text[m.index + whole.length];
-        const extraArgs = afterQuote !== ')';
+        //
+        // 但「引号后面不是 )」不等于「多了一个参数」：`"... :" + String(port) + " ..."`
+        // 是**同一个表达式**的拼接。第一版把 dsh-search 那行 daemon 启动日志误报成
+        // 值 dump，就是漏掉了 `+` 这条。只有出现顶层逗号才算多参数。
+        //
+        // 已知残余盲区（不装成全覆盖）：拼接出来的对象 dump 仍抓不到，
+        // 例如 `"[x] " + JSON.stringify(o)`。要抓它得真正解析调用表达式，
+        // 而不是看相邻字符 —— 等真的出现这种写法再说，不为假想补复杂度。
+        const tail = text.slice(m.index + whole.length);
+        const afterQuote = tail[0];
+        const continuesExpression = /^\s*\+/.test(tail.slice(0, 8));
+        const extraArgs = afterQuote !== ')' && !continuesExpression;
 
         const hasPrefix = /^\s*\[[^\]]+\]/.test(literal);
         const prefix = hasPrefix ? literal.match(/^\s*(\[[^\]]+\])/)[1] : null;
