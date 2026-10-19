@@ -216,8 +216,18 @@ if (-not $SkipSmoke) {
     }
 }
 
-# ---------- 8. 四条审计轴: 依赖 / 同代 / 运行时 / 日志 ----------
-# 第 6、7 步只能证明「文件在盘上、配置能解析」。它们抓不到:
+# ---------- 8. 宿主解析层 + 四条审计轴 ----------
+# 先补一层 $dshHome\profiles\node_modules 指向宿主的 node_modules。
+#
+# 为什么需要它: 插件的 `import '@deepseek-ai/dsh-tools'` 走 Node 的常规向上查找,
+# 而 profile 自己的 node_modules 里【没有】宿主包 —— 它们是 peer, 而本 profile 设了
+# autoInstallPeers:false。缺这一层时, 干净机器上的表现是「装得上、解析不到」。
+# 2026-10-19 在隔离 home 里实测: 4 个插件 `@deepseek-ai/dsh-tools 解析不到`,
+# 补上这层后立刻变成 硬伤 0 / 不可判定 0 / 合规 16。
+#
+# 已有这一层就【不碰】: 它可能是有人刻意做的共享 farm。
+#
+# 之后才跑四条审计轴, 因为:
 #   · 插件和宿主不是同一代 —— 0.1.5 的包配 0.2.1 的宿主, 因为 API 面结构性兼容,
 #     全绿, 而且可以绿很久(2026-10-19 实测: 全绿了一整代)。
 #   · 依赖装不回来 (版本被撤、github 源没了)。
@@ -225,24 +235,63 @@ if (-not $SkipSmoke) {
 # 四条轴都只在**真问题**上退出 1, 不对建议性提醒失败, 所以可以直接当门禁。
 if (-not $SkipSmoke) {
     Write-Host ""
-    Write-Host "==> 审计: 依赖 / 同代 / 运行时 / 日志" -ForegroundColor Cyan
-    $auditArgs = @((Join-Path $repoDir "scripts\audit-all.mjs"), "--profile-dir", $profileDir)
 
-    # 「同代」那条轴需要一个宿主 node_modules。装法不同路径不同, 所以试候选而不是猜死;
-    # 找不到就让它跳过并说清楚, 不装作验过了。
+    # 宿主 node_modules: 先从 `dsh` 可执行文件往上爬。每一层试三种布局:
+    #   <d>/@deepseek-ai/dsh-tools                (共享 node_modules)
+    #   <d>/node_modules/@deepseek-ai/dsh-tools   (普通安装)
+    #   <d>/@deepseek-ai/dsh/node_modules/...     (npm -g 的嵌套布局)
+    # 这一条能覆盖 npm -g / 私有 prefix / pnpm / npx, 比猜固定位置可靠。
+    function Find-HostNodeModules([string]$Start) {
+        $d = $Start
+        for ($i = 0; $i -lt 6 -and $d; $i++) {
+            if (Test-Path (Join-Path $d "@deepseek-ai\dsh-tools\package.json")) { return $d }
+            $inner = Join-Path $d "node_modules"
+            if (Test-Path (Join-Path $inner "@deepseek-ai\dsh-tools\package.json")) { return $inner }
+            $nested = Join-Path $d "@deepseek-ai\dsh\node_modules"
+            if (Test-Path (Join-Path $nested "@deepseek-ai\dsh-tools\package.json")) { return $nested }
+            $parent = Split-Path $d -Parent
+            if (-not $parent -or $parent -eq $d) { break }
+            $d = $parent
+        }
+        return $null
+    }
+
     $dshForAudit = Get-Command dsh -ErrorAction SilentlyContinue
     $hostNm = $null
-    $hostCands = @()
-    if ($dshForAudit) { $hostCands += (Join-Path (Split-Path $dshForAudit.Source -Parent) "node_modules\@deepseek-ai\dsh\node_modules") }
-    if ($env:APPDATA) { $hostCands += (Join-Path $env:APPDATA "npm\node_modules\@deepseek-ai\dsh\node_modules") }
-    foreach ($c in $hostCands) {
-        if (Test-Path (Join-Path $c "@deepseek-ai\dsh-tools\package.json")) { $hostNm = $c; break }
+    if ($dshForAudit) { $hostNm = Find-HostNodeModules (Split-Path $dshForAudit.Source -Parent) }
+    if (-not $hostNm) {
+        $hostCands = @()
+        if ($env:APPDATA) { $hostCands += (Join-Path $env:APPDATA "npm\node_modules\@deepseek-ai\dsh\node_modules") }
+        if ($env:ProgramFiles) { $hostCands += (Join-Path $env:ProgramFiles "nodejs\node_modules\@deepseek-ai\dsh\node_modules") }
+        foreach ($c in $hostCands) {
+            if (Test-Path (Join-Path $c "@deepseek-ai\dsh-tools\package.json")) { $hostNm = $c; break }
+        }
     }
-    if ($hostNm) {
-        $auditArgs += @("--host", $hostNm)
+
+    $resolveLayer = Join-Path $dshHome "profiles\node_modules"
+    if (-not $hostNm) {
+        Write-Host "找不到全局宿主的 node_modules —— 宿主解析层无法建立,'同代'那条轴会被跳过。" -ForegroundColor DarkGray
+    } elseif (Test-Path $resolveLayer) {
+        Write-Host "宿主解析层已存在,不覆盖: $resolveLayer" -ForegroundColor DarkGray
     } else {
-        Write-Host "  找不到全局宿主的 node_modules —— '同代'那条轴会被跳过(其余三条照跑)。" -ForegroundColor DarkGray
+        try {
+            New-Item -ItemType Directory -Force -Path (Split-Path $resolveLayer) | Out-Null
+            New-Item -ItemType Junction -Path $resolveLayer -Target $hostNm | Out-Null
+            if (Test-Path (Join-Path $resolveLayer "@deepseek-ai\dsh-tools\package.json")) {
+                Write-Host "已建立宿主解析层: $resolveLayer -> $hostNm" -ForegroundColor Green
+            } else {
+                Write-Host "宿主解析层已建立但解析仍失败: $resolveLayer" -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host "宿主解析层建立失败: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "  这不阻止部署, 但插件的 @deepseek-ai/* 会解析不到。手建: New-Item -ItemType Junction -Path '$resolveLayer' -Target '$hostNm'" -ForegroundColor Yellow
+        }
     }
+
+    Write-Host ""
+    Write-Host "==> 审计: 依赖 / 同代 / 运行时 / 日志" -ForegroundColor Cyan
+    $auditArgs = @((Join-Path $repoDir "scripts\audit-all.mjs"), "--profile-dir", $profileDir)
+    if ($hostNm) { $auditArgs += @("--host", $hostNm) }
 
     & node @auditArgs
     if ($LASTEXITCODE -ne 0) {

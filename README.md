@@ -304,6 +304,27 @@ false，于是每个 npm 依赖都被静默判成"没有构建脚本"，生成�
 两个 MC 服务）：私有宿主装进独立目录、`DSH_HOME` 指向独立目录、服务用临时空闲端口启动 ——
 全程没碰系统里的 `dsh`，也没碰 `~/.dsh`。
 
+## 宿主解析层：`profiles/node_modules`（装得上 ≠ 跑得起来）
+
+插件的 `import '@deepseek-ai/dsh-tools'` 走 Node 的常规向上查找；而 profile 自己的
+`node_modules` 里**没有**宿主包 —— 它们是 peer，本 profile 又设了 `autoInstallPeers: false`。
+所以必须有一层 `~/.dsh/profiles/node_modules` 指向宿主的 `node_modules`：
+
+```
+~/.dsh/profiles/node_modules  →  <dsh 安装位置>/node_modules
+```
+
+少了它，正常表现是「装得上、解析不到」：依赖装完了、`dump-config` 也过了，但插件的
+`@deepseek-ai/*` 无处可寻。
+
+这件事长期没人写下来，后果是：这台开发机当年靠**手工**建的 junction 让它工作，
+而全新机器上装出来的 profile 缺这一层 —— 2026-10-19 用隔离 home 实测复现：
+4 个插件报 `@deepseek-ai/dsh-tools 解析不到`；补上这层后立刻变成
+**硬伤 0 / 不可判定 0 / 合规 16**。
+
+`setup.ps1` / `setup.sh` 现在会自动建立它（Windows 用 junction，Linux 用 symlink），
+**已存在就不覆盖**（它可能是有人刻意做的共享 farm）。
+
 ## 世代一致性（这一层是因为一天里连踩五个静默故障才加的）
 
 四条轴一起跑（依赖 / 同代 / 运行时 / 日志），任一失败即退出 1 —— 装的时候就能断言，

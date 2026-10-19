@@ -187,8 +187,18 @@ if [ "$SKIP_SMOKE" != "1" ]; then
   fi
 fi
 
-# ---------- 9. 四条审计轴: 依赖 / 同代 / 运行时 / 日志 ----------
-# 第 7、8 步只能证明「文件在盘上、配置能解析」。它们抓不到:
+# ---------- 9. 宿主解析层 + 四条审计轴 ----------
+# 先补一层 $DSH_HOME/profiles/node_modules 指向宿主的 node_modules。
+#
+# 为什么需要它: 插件的 `import '@deepseek-ai/dsh-tools'` 走 Node 的常规向上查找,
+# 而 profile 自己的 node_modules 里【没有】宿主包 —— 它们是 peer, 而本 profile 设了
+# autoInstallPeers:false。缺这一层时, 干净机器上的表现是「装得上、解析不到」。
+# 2026-10-19 在隔离 home 里实测(Windows): 4 个插件 `@deepseek-ai/dsh-tools 解析不到`,
+# 补上这层后立刻变成 硬伤 0 / 不可判定 0 / 合规 16。
+#
+# 已有这一层就【不碰】: 它可能是有人刻意做的共享 farm。
+#
+# 之后才跑四条审计轴, 因为:
 #   · 插件和宿主不是同一代 —— 0.1.5 的包配 0.2.1 的宿主, 因为 API 面结构性兼容,
 #     全绿, 而且可以绿很久(2026-10-19 实测: 全绿了一整代)。
 #   · 依赖装不回来 (版本被撤、github 源没了)。
@@ -196,25 +206,62 @@ fi
 # 四条轴都只在**真问题**上退出 1, 对建议性提醒不失败, 所以可以直接当门禁。
 if [ "$SKIP_SMOKE" != "1" ]; then
   echo ""
+
+  # 宿主 node_modules: 先按布局推 —— 从 `dsh` 可执行文件往上爬, 每一层都试
+  # `<d>/@deepseek-ai/dsh-tools` 和 `<d>/node_modules/@deepseek-ai/dsh-tools`。
+  # 这一条能覆盖 npm -g / 私有 prefix / pnpm / npx, 比猜固定位置可靠。
+  HOST_NM=""
+  probe_host_nm() {
+    if [ -f "$1/@deepseek-ai/dsh-tools/package.json" ]; then printf '%s' "$1"; return 0; fi
+    if [ -f "$1/node_modules/@deepseek-ai/dsh-tools/package.json" ]; then printf '%s' "$1/node_modules"; return 0; fi
+    # npm -g 布局: <prefix>/@deepseek-ai/dsh/node_modules/<宿主包>
+    if [ -f "$1/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-tools/package.json" ]; then
+      printf '%s' "$1/@deepseek-ai/dsh/node_modules"; return 0
+    fi
+    return 1
+  }
+  DSH_BIN="$(command -v dsh 2>/dev/null || true)"
+  if [ -n "$DSH_BIN" ]; then
+    REAL_BIN="$(readlink -f "$DSH_BIN" 2>/dev/null || printf '%s' "$DSH_BIN")"
+    D="$(dirname "$REAL_BIN")"
+    for _ in 1 2 3 4 5 6; do
+      if HOST_NM="$(probe_host_nm "$D")"; then break; fi
+      [ -z "$D" ] || [ "$D" = "/" ] && break
+      D="$(dirname "$D")"
+    done
+    HOST_NM="${HOST_NM:-}"
+  fi
+  # 回落: 常见的全局安装位置。
+  if [ -z "$HOST_NM" ]; then
+    NPM_ROOT="$(npm root -g 2>/dev/null || true)"
+    HOST_CANDS=()
+    [ -n "$NPM_ROOT" ] && HOST_CANDS+=("$NPM_ROOT/@deepseek-ai/dsh/node_modules")
+    HOST_CANDS+=("/usr/lib/node_modules/@deepseek-ai/dsh/node_modules")
+    HOST_CANDS+=("/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules")
+    for c in "${HOST_CANDS[@]}"; do
+      if [ -f "$c/@deepseek-ai/dsh-tools/package.json" ]; then HOST_NM="$c"; break; fi
+    done
+  fi
+
+  RESOLVE_LAYER="$DSH_HOME/profiles/node_modules"
+  if [ -z "$HOST_NM" ]; then
+    echo "找不到全局宿主的 node_modules —— 宿主解析层无法建立,'同代'那条轴会被跳过。"
+  elif [ -e "$RESOLVE_LAYER" ] || [ -L "$RESOLVE_LAYER" ]; then
+    echo "宿主解析层已存在,不覆盖: $RESOLVE_LAYER"
+  else
+    mkdir -p "$(dirname "$RESOLVE_LAYER")"
+    if ln -sfn "$HOST_NM" "$RESOLVE_LAYER" && [ -f "$RESOLVE_LAYER/@deepseek-ai/dsh-tools/package.json" ]; then
+      echo "已建立宿主解析层: $RESOLVE_LAYER -> $HOST_NM"
+    else
+      echo "宿主解析层建立失败(不阻止部署, 但插件的 @deepseek-ai/* 会解析不到)。"
+      echo "  手建: ln -sfn '$HOST_NM' '$RESOLVE_LAYER'"
+    fi
+  fi
+
+  echo ""
   echo "==> 审计: 依赖 / 同代 / 运行时 / 日志"
   AUDIT_ARGS=("$REPO_DIR/scripts/audit-all.mjs" --profile-dir "$PROFILE_DIR")
-
-  # 「同代」那条轴需要宿主 node_modules。装法不同路径不同, 试候选而不是猜死;
-  # 找不到就让那条轴跳过并说清楚, 不装作验过了。
-  HOST_NM=""
-  NPM_ROOT="$(npm root -g 2>/dev/null || true)"
-  HOST_CANDS=()
-  [ -n "$NPM_ROOT" ] && HOST_CANDS+=("$NPM_ROOT/@deepseek-ai/dsh/node_modules")
-  HOST_CANDS+=("/usr/lib/node_modules/@deepseek-ai/dsh/node_modules")
-  HOST_CANDS+=("/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules")
-  for c in "${HOST_CANDS[@]}"; do
-    if [ -f "$c/@deepseek-ai/dsh-tools/package.json" ]; then HOST_NM="$c"; break; fi
-  done
-  if [ -n "$HOST_NM" ]; then
-    AUDIT_ARGS+=(--host "$HOST_NM")
-  else
-    echo "  找不到全局宿主的 node_modules —— '同代'那条轴会被跳过(其余三条照跑)。"
-  fi
+  [ -n "$HOST_NM" ] && AUDIT_ARGS+=(--host "$HOST_NM")
 
   if ! node "${AUDIT_ARGS[@]}"; then
     echo "" >&2
