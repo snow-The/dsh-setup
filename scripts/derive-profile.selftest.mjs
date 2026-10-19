@@ -18,6 +18,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { normalizeNpmView } from './npm-view.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'derive-selftest-'));
@@ -32,6 +33,7 @@ function scaffold() {
     'profiles/web/pnpm-workspace.yaml',
   ]) fs.copyFileSync(path.join(ROOT, rel), path.join(dst, rel));
   fs.copyFileSync(path.join(ROOT, 'scripts', 'derive-profile.mjs'), path.join(dst, 'scripts', 'derive-profile.mjs'));
+  fs.copyFileSync(path.join(ROOT, 'scripts', 'npm-view.mjs'), path.join(dst, 'scripts', 'npm-view.mjs'));
   return dst;
 }
 
@@ -154,6 +156,60 @@ for (const c of cases) {
   fs.rmSync(d, { recursive: true, force: true });
 }
 
-console.log(`\n  ${bad === 0 ? '自检通过' : '自检失败'}：${good} 正确 / ${bad} 错误（共 ${cases.length} 例）`);
+// ---------- npm view 的输出形状 ----------
+// 这些不是模板变异，而是直接对规范化函数做的断言 —— 它们防的是 npm 自己的行为变化。
+// 2026-10-19 实测：npm 12 把单结果包成数组之后，旧代码把每个 npm 依赖都判成"没有构建脚本"，
+// 生成物安静地丢掉六条 allowBuilds，全程无报错。所以 npm 11 和 npm 12 两种形状都必须被钉住。
+const shapeCases = [
+  {
+    label: 'npm 11 形状：scripts 是裸对象',
+    call: () => normalizeNpmView('{"prepare":"tsdown"}', 'p@1.0.0', 'scripts'),
+    ok: (v) => v?.prepare === 'tsdown',
+  },
+  {
+    label: 'npm 12 形状：scripts 是单元素数组（这就是那次静默故障）',
+    call: () => normalizeNpmView('[{"prepare":"tsdown"}]', 'p@1.0.0', 'scripts'),
+    ok: (v) => v?.prepare === 'tsdown',
+  },
+  {
+    label: '空输出 → null（字段不存在，不是"没有构建脚本"的猜测）',
+    call: () => normalizeNpmView('  \n ', 'p@1.0.0', 'scripts'),
+    ok: (v) => v === null,
+  },
+  {
+    label: '空数组 → null',
+    call: () => normalizeNpmView('[]', 'p@1.0.0', 'scripts'),
+    ok: (v) => v === null,
+  },
+  {
+    label: '多结果 → 抛错（说明符不精确，继续会取错版本）',
+    call: () => normalizeNpmView('[{"a":1},{"b":2}]', 'p@1.0.0', 'scripts'),
+    throws: true,
+  },
+  {
+    label: '非 JSON 输出 → 抛错（外部契约变了）',
+    call: () => normalizeNpmView('command not found: npm', 'p@1.0.0', 'scripts'),
+    throws: true,
+  },
+  {
+    label: '标量 → 抛错',
+    call: () => normalizeNpmView('"0.1.0"', 'p@1.0.0', 'scripts'),
+    throws: true,
+  },
+];
+
+for (const c of shapeCases) {
+  let threw = false, value;
+  try { value = c.call(); } catch { threw = true; }
+  const correct = c.throws ? threw : (!threw && c.ok(value));
+  if (correct) { good++; console.log(`  ✓ ${c.label}`); }
+  else {
+    bad++;
+    console.log(`  ✗ ${c.label}`);
+    console.log(`      期望${c.throws ? '抛错' : '正常返回'}，实际${threw ? '抛错' : `返回 ${JSON.stringify(value)}`}`);
+  }
+}
+
+console.log(`\n  ${bad === 0 ? '自检通过' : '自检失败'}：${good} 正确 / ${bad} 错误（共 ${cases.length + shapeCases.length} 例）`);
 fs.rmSync(TMP, { recursive: true, force: true });
 process.exit(bad ? 1 : 0);

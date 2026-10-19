@@ -45,8 +45,8 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { npmView, hasBuildScript } from './npm-view.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PROFILE = path.join(ROOT, 'profiles', 'web');
@@ -118,14 +118,8 @@ for (const p of intent.derivedOverridesFrom ?? []) {
 }
 
 // ---------- npm 查询 ----------
-function npmView(spec, field) {
-  try {
-    const raw = execFileSync('npm', ['view', spec, field, '--json'], {
-      encoding: 'utf8', shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-    return raw ? JSON.parse(raw) : null;
-  } catch { return undefined; }   // undefined = 查询失败，区别于 null = 空结果
-}
+// 输出规范化与形状校验都在 npm-view.mjs 里 —— 那里记录了这个接口变过一次、
+// 而那次变化静默改变了本脚本的产物（见该文件的头注释）。
 
 /** 推导 overrides：把 derivedOverridesFrom 里各包当前版本的 caret 子依赖钉到同一版本。 */
 function deriveOverrides() {
@@ -158,28 +152,33 @@ function deriveAllowBuilds(overrides) {
       if (!OFFLINE) fail(`查不到 ${name}@${version} 的 scripts（网络？）`);
       continue;
     }
-    if (scripts && ['preinstall', 'install', 'postinstall', 'prepare'].some((k) => Object.hasOwn(scripts, k))) {
-      npmWithBuild.push(name);
-    }
+    if (hasBuildScript(scripts)) npmWithBuild.push(name);
   }
 
   const sort = (a) => [...a].sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
   return { gitLike: sort(gitLike), npmWithBuild: sort(npmWithBuild), buildDeps: sort(buildDeps) };
 }
 
-const overrides = deriveOverrides();
-const allow = deriveAllowBuilds(overrides);
+// 外部契约（npm view 的输出形状）不认识时，npm-view.mjs 会抛错。
+// 这里选择【直接停】而不是把它收进 problems 继续跑：形状不认识意味着我对世界的理解过时了，
+// 继续推导只会产出一份看起来正常、实际少了几条 allowBuilds 的清单 —— 那正是已经发生过的故障。
+let overrides, allow;
+try {
+  overrides = deriveOverrides();
+  allow = deriveAllowBuilds(overrides);
 
-// 被 override 钉住的子包同样会被真实安装，所以按【同一条规则】判定，而不是默认放行。
-// （第一版这里直接把它们塞进放行列表 —— 那是猜，不是推导。）
-for (const [name, version] of Object.entries(overrides)) {
-  const scripts = npmView(`${name}@${version}`, 'scripts');
-  if (scripts === undefined) { if (!OFFLINE) fail(`查不到 ${name}@${version} 的 scripts（网络？）`); continue; }
-  if (scripts && ['preinstall', 'install', 'postinstall', 'prepare'].some((k) => Object.hasOwn(scripts, k))) {
-    if (!allow.npmWithBuild.includes(name)) allow.npmWithBuild.push(name);
+  // 被 override 钉住的子包同样会被真实安装，所以按【同一条规则】判定，而不是默认放行。
+  // （第一版这里直接把它们塞进放行列表 —— 那是猜，不是推导。）
+  for (const [name, version] of Object.entries(overrides)) {
+    const scripts = npmView(`${name}@${version}`, 'scripts');
+    if (scripts === undefined) { if (!OFFLINE) fail(`查不到 ${name}@${version} 的 scripts（网络？）`); continue; }
+    if (hasBuildScript(scripts) && !allow.npmWithBuild.includes(name)) allow.npmWithBuild.push(name);
   }
+  allow.npmWithBuild.sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
+} catch (e) {
+  console.error(`✗ ${e.message}`);
+  process.exit(1);
 }
-allow.npmWithBuild.sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
 
 // ---------- 渲染 ----------
 function renderPackageJson() {

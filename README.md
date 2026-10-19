@@ -18,6 +18,7 @@ dsh-setup/
 ├── package.json                 # 仓库自身的工具清单（不含插件依赖，见下）
 ├── scripts/
 │   ├── derive-profile.mjs       # 从 plugins.intent.json 推导生成物
+│   ├── npm-view.mjs             # `npm view` 输出规范化（npm 12 把单结果包成数组）
 │   ├── derive-profile.selftest.mjs   # 推导脚本的变异自检
 │   ├── check-template.mjs       # 模板一致性检查（setup 的装配验证也会调）
 │   ├── check-template.selftest.mjs   # 检查器的变异自检
