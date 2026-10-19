@@ -21,11 +21,14 @@ import { execFileSync } from 'node:child_process';
 const BUILD_KEYS = ['preinstall', 'install', 'postinstall', 'prepare'];
 
 /**
- * 把原始 stdout 规范化成一个对象或 null。
+ * 把原始 stdout 规范化成 JSON 值（数组包装会被拆掉）。
+ * 这里**不**判定类型 —— 期望什么类型由调用方声明（见 npmView 的 as 选项）。
+ * 理由是同一个接口既会被问"这个包的 scripts 对象"，也会被问"它的 version 字符串"，
+ * 在不知道期望的情况下拒绝标量，会把正常查询误判成契约异常。
  * @param {string} raw npm 的 stdout
  * @param {string} spec 用于报错的说明符
  * @param {string} field 字段名
- * @returns {object|null} 空输出 → null（该字段不存在）
+ * @returns {*} 空输出 → null（该字段不存在）
  * @throws 输出不是 JSON，或形状不认识
  */
 export function normalizeNpmView(raw, spec, field) {
@@ -54,11 +57,7 @@ export function normalizeNpmView(raw, spec, field) {
     parsed = parsed[0];
   }
 
-  if (parsed === null) return null;
-  if (typeof parsed !== 'object') {
-    throw new Error(`npm view ${spec} ${field} 返回了 ${typeof parsed}，期望对象 —— 拒绝猜。`);
-  }
-  return parsed;
+  return parsed ?? null;
 }
 
 /** 这个包的 scripts 里是否有任何会在安装时执行的钩子。 */
@@ -67,11 +66,31 @@ export function hasBuildScript(scripts) {
 }
 
 /**
- * 查询一个包字段。
- * @returns {object|null|undefined} 对象/空；undefined 表示【子进程失败】（通常是网络或包不存在）
- * @throws 拿到了输出但形状不认识（见 normalizeNpmView）
+ * 断言"我要的是对象"。暴露成独立函数，是为了它能被直接单测 ——
+ * 埋在 npmView 里的类型检查等于在测试里跑不起来。
+ * @throws 值不是对象也不是 null
  */
-export function npmView(spec, field) {
+export function assertObjectShape(value, spec, field) {
+  if (value === null || value === undefined) return value;
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(
+      `npm view ${spec} ${field} 返回了 ${Array.isArray(value) ? 'array' : typeof value}，期望对象 —— 拒绝猜。`,
+    );
+  }
+  return value;
+}
+
+/**
+ * 查询一个包字段。
+ * @param {string} spec 例如 'pkg@1.0.0'
+ * @param {string} field 例如 'scripts' / 'version' / 'time'
+ * @param {{as?: 'any'|'object'}} [opts] as='object' 时要求结果是对象或 null，
+ *   否则抛错 —— 声明"我要的是对象"，就不会在拿到标量时静默当成空对象。
+ * @returns {object|null|undefined} undefined 表示【子进程失败】（网络或包不存在）
+ * @throws 拿到了输出但形状不认识 / 与 as 声明不符
+ */
+export function npmView(spec, field, opts = {}) {
+  const { as = 'any' } = opts;
   let raw;
   try {
     raw = execFileSync('npm', ['view', spec, field, '--json'], {
@@ -82,5 +101,6 @@ export function npmView(spec, field) {
   } catch {
     return undefined;
   }
-  return normalizeNpmView(raw, spec, field);
+  const value = normalizeNpmView(raw, spec, field);
+  return as === 'object' ? assertObjectShape(value, spec, field) : value;
 }

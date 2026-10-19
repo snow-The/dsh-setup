@@ -126,7 +126,7 @@ function deriveOverrides() {
   const out = {};
   for (const parent of intent.derivedOverridesFrom ?? []) {
     const version = npmDeps[parent];
-    const subDeps = npmView(`${parent}@${version}`, 'dependencies');
+    const subDeps = npmView(`${parent}@${version}`, 'dependencies', { as: 'object' });
     if (subDeps === undefined) {
       if (!OFFLINE) fail(`查不到 ${parent}@${version} 的 dependencies（网络？）`);
       continue;
@@ -147,7 +147,7 @@ function deriveAllowBuilds(overrides) {
 
   const npmWithBuild = [];
   for (const [name, version] of Object.entries(npmDeps)) {
-    const scripts = npmView(`${name}@${version}`, 'scripts');
+    const scripts = npmView(`${name}@${version}`, 'scripts', { as: 'object' });
     if (scripts === undefined) {
       if (!OFFLINE) fail(`查不到 ${name}@${version} 的 scripts（网络？）`);
       continue;
@@ -170,7 +170,7 @@ try {
   // 被 override 钉住的子包同样会被真实安装，所以按【同一条规则】判定，而不是默认放行。
   // （第一版这里直接把它们塞进放行列表 —— 那是猜，不是推导。）
   for (const [name, version] of Object.entries(overrides)) {
-    const scripts = npmView(`${name}@${version}`, 'scripts');
+    const scripts = npmView(`${name}@${version}`, 'scripts', { as: 'object' });
     if (scripts === undefined) { if (!OFFLINE) fail(`查不到 ${name}@${version} 的 scripts（网络？）`); continue; }
     if (hasBuildScript(scripts) && !allow.npmWithBuild.includes(name)) allow.npmWithBuild.push(name);
   }

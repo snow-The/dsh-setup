@@ -23,6 +23,7 @@ dsh-setup/
 │   ├── check-template.mjs       # 模板一致性检查（setup 的装配验证也会调）
 │   ├── check-template.selftest.mjs   # 检查器的变异自检
 │   ├── verify-all.mjs           # 一条命令跑完六层验证（win/linux 通用，不依赖 CI）
+│   ├── audit-plugins.mjs        # 对一个 profile 的依赖做六维审计（来源/版本/内容/世代/入口/挂载）
 │   ├── boot-check.mjs           # 真启动一次 profile，验证装配/服务/无报错
 │   ├── plugin-load-check.mjs    # 在指定宿主的真实包上执行插件入口（严格钉住宿主版本）
 │   ├── host-map.mjs             # 把 @deepseek-ai/* 严格钉到指定宿主 + 解析自证
@@ -297,6 +298,32 @@ false，于是每个 npm 依赖都被静默判成"没有构建脚本"，生成�
 两次 Linux 验证都是在**有真实负载的机器**上做的（其中一台同机跑着生产实例，另一台跑着
 两个 MC 服务）：私有宿主装进独立目录、`DSH_HOME` 指向独立目录、服务用临时空闲端口启动 ——
 全程没碰系统里的 `dsh`，也没碰 `~/.dsh`。
+
+## 依赖审计（六维，比"版本号新不新"更硬）
+
+```bash
+node scripts/audit-plugins.mjs --profile-dir ~/.dsh/profiles/web
+```
+
+只比版本号是**不够**的，这一点有实例：`@tt-a1i/archify-dsh` 在 npm 上的 latest 是 `1.0.0`，
+仓库里 `integrations/deepseek-harness` 的版本号也还是 `1.0.0` —— 但发布之后仓库又合了
+`fix(dsh): preserve default skills across installation and upgrade`，npm 包里的
+`cordis.patch.yml` 仍是 `includeDefaultRoots: false`，仓库里已经是 `true`。
+**版本号冻结、内容落后**，任何只看 version 的检查都发现不了。
+
+所以审计分六维，每维都给证据：
+
+| 维度 | 抓什么 |
+|---|---|
+| ① 来源可达 | `github:` 仓库/tag 在不在；`file:` 有没有 git 远端（没有 = 新机器装不回来） |
+| ② 版本新鲜 | npm dist-tag / git tag 的**semver 最大**（不是 `ls-remote` 的字典序，`v2.9.9` 会排到 `v2.13.0` 后面） |
+| ③ 内容新鲜 | npm 包的发布时间 vs 仓库对应目录的最后提交 |
+| ④ 世代兼容 | 它声明的 `engines.dsh` / peer dsh（宿主包跳过：它们随宿主走） |
+| ⑤ 入口存在 | `main`/`exports` 指向的文件 —— `./src/*` 这类**通配符**会展开后判定，不当缺失 |
+| ⑥ 挂载一致 | 装了没挂 / 挂了没装 |
+
+已知的两个坑，脚本里都做了处理，因为它自己就先踩过：通配符入口会被误报"缺失"；
+宿主包（`@deepseek-ai/*`）拿 npm latest 去比会给出**降级**建议（实测 `0.2.0-rc.2 → 0.0.1-rc.1`）。
 
 ## 升级
 

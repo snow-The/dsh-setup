@@ -18,7 +18,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { normalizeNpmView } from './npm-view.mjs';
+import { normalizeNpmView, assertObjectShape } from './npm-view.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'derive-selftest-'));
@@ -192,9 +192,19 @@ const shapeCases = [
     throws: true,
   },
   {
-    label: '标量 → 抛错',
-    call: () => normalizeNpmView('"0.1.0"', 'p@1.0.0', 'scripts'),
+    label: '标量原样返回（npm view <pkg> version 返回的就是字符串）',
+    call: () => normalizeNpmView('"0.1.0"', 'p@1.0.0', 'version'),
+    ok: (v) => v === '0.1.0',
+  },
+  {
+    label: '声明要对象却拿到标量 → 抛错（不会静默当成"没有字段"）',
+    call: () => assertObjectShape('0.1.0', 'p@1.0.0', 'scripts'),
     throws: true,
+  },
+  {
+    label: '对象 + 声明要对象 → 通过',
+    call: () => assertObjectShape({ prepare: 'tsdown' }, 'p@1.0.0', 'scripts'),
+    ok: (v) => v?.prepare === 'tsdown',
   },
 ];
 
