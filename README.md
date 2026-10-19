@@ -21,6 +21,7 @@ dsh-setup/
 │   ├── derive-profile.selftest.mjs   # 推导脚本的变异自检
 │   ├── check-template.mjs       # 模板一致性检查（CI 与 setup 都会调）
 │   ├── check-template.selftest.mjs   # 检查器的变异自检
+│   ├── boot-check.mjs           # 真启动一次 profile，验证装配/服务/无报错
 │   ├── e2e-verify.mjs           # 端到端校验
 │   └── fix-ps1-bom.mjs          # 给 .ps1 补 UTF-8 BOM
 └── profiles/
@@ -183,7 +184,29 @@ pnpm test        # 四个程序全跑：推导自洽 + 模板自洽 + 两个变�
 pnpm derive      # 改完 plugins.intent.json 后重新生成（= derive-profile.mjs --write）
 pnpm check       # 只跑模板一致性检查
 pnpm selftest    # 只跑两个变异自检
+pnpm boot:check  # 真启动一次已部署的 profile（需要先 .\setup.ps1 部署过）
 ```
+
+### 为什么需要 `boot:check` —— 一个实测出来的层次差异
+
+2026-10-19 在部署出来的 profile 上做了对照实验，往某个 bundle 的 patch 里注入一条
+引用了**不存在模块**的 `- insert:` 声明：
+
+| 检测层 | 结果 |
+|---|---|
+| `dsh --dump-config` | exit 0，stderr **0 行**，那条 row 照常出现在输出里 —— **完全看不见** |
+| 真实启动 | `✗ ghost (@deepseek-ai/dsh-nonexistent-module): failed to import: ERR_MODULE_NOT_FOUND` |
+
+原因是 `--dump-config` 只**组合** YAML，不解析模块。
+
+所以 `setup.ps1` / `setup.sh` 里的装配验证（dump-config 的 stderr 必须为空）是
+**必要但不充分**的：它能抓「配置指向不存在的条目」（`patch: entry "x" not found`），
+抓不到「insert 的模块解析不了」「插件 apply 抛错」「服务注册冲突」。
+最后这一类只有 `pnpm boot:check` 看得见 —— 它要求进程存活 + 端口监听 +
+拿到含 `__DSH_BOOT__` 的页面 + stderr 无真实错误，四项同时成立。
+
+已知良性输出（task-board 单实例锁、MCP 启动横幅）在脚本里有**带理由的分类器**，
+不是静默白名单。
 
 `pnpm test` 依次跑四个**互相独立**的程序：
 

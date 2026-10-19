@@ -222,4 +222,6 @@ Write-Host "=== 部署完成! ===" -ForegroundColor Green
 Write-Host "1. 启动:  dsh web"
 Write-Host "2. 首次使用请在 GUI 设置中配置你的 API key / 凭据(本仓库不含任何 key)"
 Write-Host "3. 需要远程主机时,在 GUI 的 SSH 插件页添加主机"
+Write-Host "4. 装配验证: pnpm boot:check  —— 真启动一次,确认装配/服务/无报错"
+Write-Host "   (第 7 步的 dump-config 只组合 YAML,看不到模块解析失败;这一步才看得到)"
 Write-Host ""
