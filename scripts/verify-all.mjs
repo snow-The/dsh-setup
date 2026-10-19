@@ -25,6 +25,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -44,7 +45,17 @@ const STATIC = [
   { id: 'mut-template', title: '检查表的变异自检', file: 'check-template.selftest.mjs' },
 ];
 
+const DSH_HOME = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+const PROFILE_DIR = path.join(DSH_HOME, 'profiles', PROFILE);
+
 const GATED = [
+  {
+    id: 'generation',
+    title: '插件与宿主同代（import / client 注入 / 解析目标 / 声明）',
+    file: 'audit-generation.mjs',
+    missing: HOST ? null : '--host',
+    args: () => ['--profile-dir', PROFILE_DIR, '--host', HOST],
+  },
   {
     id: 'boot',
     title: '真启动一次（装配 / 服务 / 无报错）',

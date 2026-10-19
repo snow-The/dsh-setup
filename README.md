@@ -23,7 +23,10 @@ dsh-setup/
 │   ├── check-template.mjs       # 模板一致性检查（setup 的装配验证也会调）
 │   ├── check-template.selftest.mjs   # 检查器的变异自检
 │   ├── verify-all.mjs           # 一条命令跑完六层验证（win/linux 通用，不依赖 CI）
+│   ├── audit-generation.mjs     # 插件与宿主是否同一代（import / client 注入 / 解析目标 / 声明）
 │   ├── audit-plugins.mjs        # 对一个 profile 的依赖做六维审计（来源/版本/内容/世代/入口/挂载）
+│   ├── audit-runtime.mjs        # 运行时足迹（spawn/端口/定时器/绝对路径）+ --expect-host 世代一致性
+│   ├── audit-logs.mjs           # 插件写进启动通道的日志是否合规（前缀 / 级别 / 值 dump）
 │   ├── boot-check.mjs           # 真启动一次 profile，验证装配/服务/无报错
 │   ├── plugin-load-check.mjs    # 在指定宿主的真实包上执行插件入口（严格钉住宿主版本）
 │   ├── host-map.mjs             # 把 @deepseek-ai/* 严格钉到指定宿主 + 解析自证
@@ -298,6 +301,23 @@ false，于是每个 npm 依赖都被静默判成"没有构建脚本"，生成�
 两次 Linux 验证都是在**有真实负载的机器**上做的（其中一台同机跑着生产实例，另一台跑着
 两个 MC 服务）：私有宿主装进独立目录、`DSH_HOME` 指向独立目录、服务用临时空闲端口启动 ——
 全程没碰系统里的 `dsh`，也没碰 `~/.dsh`。
+
+## 世代一致性（这一层是因为一天里连踩五个静默故障才加的）
+
+```bash
+node scripts/audit-generation.mjs --profile-dir ~/.dsh/profiles/web --host <宿主 node_modules>
+```
+
+四条判据，分**硬伤**与**软项**：
+
+| 判据 | 种类 | 为什么 |
+|---|---|---|
+| 代码里 `import` 的 `@deepseek-ai/*` 必须在目标宿主里存在 | **硬** | 不存在就是 `ERR_MODULE_NOT_FOUND`，插件整个不加载 |
+| `dsh.client.inject` 的每一项必须是宿主里存在的包 | **硬** | 指向已删除的包时，**客户端静默不挂载**，日志里一个字都没有 |
+| 插件的 `@deepseek-ai/*` 解析必须落在**这个**宿主里 | **硬** | 查找路径上另一代的副本会让"全绿"毫无意义（0.1.5 服务 0.2.1 的真实事故） |
+| `dsh.compatibility.dshReleases` 是否包含这一代 | 软 | 声明落后不等于会坏（宿主门禁看的是 `engines.dsh` 与 peer），但必须有人决定"验过了吗" |
+
+**为什么必须分硬软**：这套机器实测是 3 硬伤 / 13 软项。如果全算失败，17 个插件里 16 个红，人就会学会无视这个工具 —— 那才是真正的失败。
 
 ## 依赖审计（六维，比"版本号新不新"更硬）
 
