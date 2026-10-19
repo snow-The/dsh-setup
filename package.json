@@ -13,5 +13,6 @@
     "verify": "node scripts/verify-all.mjs",
     "audit": "node scripts/audit-plugins.mjs",
     "test": "node scripts/derive-profile.mjs && node scripts/check-template.mjs && node scripts/derive-profile.selftest.mjs && node scripts/check-template.selftest.mjs"
-  }
+  },
+  "license": "MIT"
 }
