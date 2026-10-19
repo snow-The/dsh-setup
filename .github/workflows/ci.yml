@@ -60,6 +60,16 @@ jobs:
         run: npm install -g @deepseek-ai/dsh@0.2.1-rc.2
 
       - name: Deploy the template into a throwaway DSH_HOME
+        env:
+          # git-hosted 插件在 prepare 阶段会跑自己的 `pnpm install`。有些插件的仓库里
+          # pnpm-lock.yaml 已经和 package.json 脱节（例如 @snow-the/dsh-plugin-guide 加了
+          # @deepseek-ai/dsh 依赖却没更新 lock）。本机安装时 pnpm 会静默更新 lock，
+          # 但在 CI 里 frozen-lockfile 默认是 true，于是直接
+          #   ERR_PNPM_OUTDATED_LOCKFILE → ERR_PNPM_PREPARE_PACKAGE
+          # 这不是模板的问题，是那些插件的仓库状态问题；这里先放宽，让 CI 能验证模板本身。
+          # 真正的修法是让各插件仓库的 lockfile 与 package.json 保持一致（或在插件仓库里
+          # 不提交 lockfile —— 它们是要发布到 npm 的库，不是应用）。
+          NPM_CONFIG_FROZEN_LOCKFILE: 'false'
         run: |
           set -euo pipefail
           export DSH_HOME="$RUNNER_TEMP/dsh-home"
