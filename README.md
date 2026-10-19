@@ -19,8 +19,9 @@ dsh-setup/
 ├── scripts/
 │   ├── derive-profile.mjs       # 从 plugins.intent.json 推导生成物
 │   ├── derive-profile.selftest.mjs   # 推导脚本的变异自检
-│   ├── check-template.mjs       # 模板一致性检查（CI 与 setup 都会调）
+│   ├── check-template.mjs       # 模板一致性检查（setup 的装配验证也会调）
 │   ├── check-template.selftest.mjs   # 检查器的变异自检
+│   ├── verify-all.mjs           # 一条命令跑完六层验证（win/linux 通用，不依赖 CI）
 │   ├── boot-check.mjs           # 真启动一次 profile，验证装配/服务/无报错
 │   ├── plugin-load-check.mjs    # 在指定宿主的真实包上执行插件入口（严格钉住宿主版本）
 │   ├── host-map.mjs             # 把 @deepseek-ai/* 严格钉到指定宿主 + 解析自证
@@ -251,6 +252,45 @@ node scripts/plugin-load-check.mjs --profile web --host /path/to/host/node_modul
 两个自检都做**精确归因**：每条变异都声明期望由哪条规则抓到，而不是只看退出码非 0 —— 否则一条变异被别的规则误抓也算通过，那条真正要验的规则就从没被证明过。
 
 写第一个自检时它当场抓出了检查器自身的一个 bug —— allowBuilds 的键解析不允许冒号，而 hash 形式的键恰好含 `https:`，导致那条断言一直形同虚设。写第二个自检时它又抓出了 `[2]` 没有任何用例覆盖、以及自证专用 ID 被误判为"漂移"。**这正是变异自检存在的意义：它会抓出你自己。**
+
+## 跨平台验证（Windows / Linux，在**我们自己的机器**上跑）
+
+验证**不挂在 CI 上**。这个仓库要验的东西包括"真装一份宿主、真起一次服务"，
+而 GitHub 的 runner 不是我们的机器，行为控不住，而且每次 push 都会真的跑起来。
+所以验证就在我们持有的机器上跑，一份命令两边通用：
+
+```bash
+node scripts/verify-all.mjs                       # 静态四层，任何机器都能跑，不联网
+```
+
+要走完装配层与加载层，把宿主明确指出来：
+
+```bash
+node scripts/verify-all.mjs --dsh <宿主bin/dsh> --host <宿主>/node_modules --profile web
+```
+
+`--dsh` / `--host` 是**必给的显式路径**，不接受"自己猜一个" —— 因为不加约束时 Node 会沿
+查找路径命中另一个世代的副本，然后给你一个漂亮的假通过（本仓库踩过，见上一节）。
+没给的时候这两层会被标成 `SKIP` 并写明缺哪个参数，**跳过不算通过**。
+
+六层的顺序是从便宜到贵、从抽象到真实：
+
+| 层 | 证明什么 | 需要 |
+|---|---|---|
+| 推导自洽 | 生成物能从意图还原 | — |
+| 模板自洽 | 模板自身一致，且每条检查这次真的执行了 | — |
+| 两个变异自检 | 每条断言/检查都真的会落闸 | — |
+| 真启动一次 | 装配成功、服务可访问、无真错误 | `--dsh` |
+| 插件入口初始化 | 每个插件在**钉住的宿主**上能真的 init | `--host` |
+
+已实测的两个平台（2026-10-19）：
+
+- **Windows 11** / Node v26.7.0：四层静态 + `boot-check` PASS + `plugin-load-check` 17/17
+- **Debian 13 (trixie)** / Node v26.7.0：四层静态 + `boot-check` PASS（HTTP 200 / 49,515 字节 / `__DSH_BOOT__` / 0 真错误）+ `plugin-load-check` 16/16
+
+Linux 那份是在一台**同时跑着生产实例**的机器上做的：私有宿主装进独立目录、`DSH_HOME`
+指向独立目录、服务用临时空闲端口启动 —— 全程没碰 `/usr/local/bin/dsh`，也没碰
+`~/.dsh/profiles/web`。
 
 ## 升级
 

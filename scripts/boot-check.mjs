@@ -64,11 +64,23 @@ const started = Date.now();
 // --no-open：不要弹浏览器。--port：固定到我们挑的空闲端口。
 // detached 在 POSIX 上是为了得到【独立进程组】，否则 process.kill(-pid) 抛 ESRCH，
 // 启动的服务会留在后台占着端口。Windows 走 taskkill /T，不需要 detached。
-const child = spawn(DSH, ['--profile', PROFILE, '--no-open', '--port', String(PORT)], {
-  shell: process.platform === 'win32',
-  detached: process.platform !== 'win32',
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
+//
+// Windows 上 npm 装的 dsh 是 .cmd 垫片，不经 shell 就执行不了。但【不能】把 args 数组
+// 和 shell:true 一起传 —— Node 会报 DEP0190（参数不转义，存在注入风险），而且这条警告
+// 会混进 stderr 污染的判定输出（本仓库实测：汇总行显示成了这条警告）。
+// 所以 Windows 下自己拼一条命令行、显式加引号，只传字符串；POSIX 下仍然数组直传。
+const dshArgs = ['--profile', PROFILE, '--no-open', '--port', String(PORT)];
+const quoteForShell = (s) => (/[\s"]/.test(String(s)) ? `"${String(s).replace(/"/g, '\\"')}"` : String(s));
+const child = process.platform === 'win32'
+  ? spawn([DSH, ...dshArgs].map(quoteForShell).join(' '), {
+    shell: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  : spawn(DSH, dshArgs, {
+    shell: false,
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 
 let stdout = '', stderr = '';
 child.stdout.on('data', (c) => { stdout += c; });
