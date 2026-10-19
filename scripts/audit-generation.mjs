@@ -134,10 +134,16 @@ if (fs.existsSync(NM)) {
         }
       }
 
-      // ③ 兼容声明是否覆盖这一代。
-      //    这是【软项】：dshReleases 是给市场/UI 看的声明，宿主门禁用的是 engines.dsh 与 peer 范围。
-      //    声明落后不等于会坏，但必须有人决定"验过了吗、要不要抬"。所以单列，不计入硬失败 ——
-      //    否则 17 个插件全红，这个工具就会被人无视，那才是真正的失败。
+      // ③ 兼容声明的两个字段，性质不同，必须分开看：
+      //    · engines.dsh  —— 宿主门禁真正读的（0.2.1 起它优先且排他）。不声明 = 宿主无法判定 = 装到哪都被接受。
+      //    · dshReleases  —— 给市场/UI 看的声明，不参与门禁。
+      //    这条是 dsh-insights-kit 的自查提醒我的：它抓到了"engines.dsh 未声明"，而我只查了 dshReleases。
+      //    不设成 hard：不会让现有功能坏掉；但它让"兼容性"这件事变成不可判定，所以单独标注。
+      info.enginesDsh = pj.engines?.dsh ?? null;
+      if (!info.enginesDsh) {
+        problems.push({ severity: 'note', text: 'engines.dsh 未声明 —— 宿主门禁无法判定它能不能装在这代宿主上（装到哪都会被接受）' });
+      }
+
       const rel = pj.dsh?.compatibility?.dshReleases;
       info.declared = Array.isArray(rel) ? rel : null;
       info.verified = pj.dsh?.compatibility?.verifiedAgainst ?? null;
@@ -171,6 +177,7 @@ if (AS_JSON) {
   const w = (s, n) => { const t = String(s ?? ''); const dw = [...t].reduce((a, c) => a + (/[\u2E80-\u4A4F\uAC00-\uD7A3]/.test(c) ? 2 : 1), 0); return t + ' '.repeat(Math.max(0, n - dw)); };
   const hard = (r) => r.problems.filter((p) => p.severity === 'hard');
   const soft = (r) => r.problems.filter((p) => p.severity === 'soft');
+  const note = (r) => r.problems.filter((p) => p.severity === 'note');
 
   console.log(`\n宿主: ${HOST}`);
   console.log(`世代: ${HOST_VERSION}   （宿主里有 ${HOST_PKGS.size} 个 @deepseek-ai/* 包）`);
@@ -187,7 +194,13 @@ if (AS_JSON) {
 
   const broken = rows.filter((r) => hard(r).length);
   const stale = rows.filter((r) => !hard(r).length && soft(r).length);
-  console.log(`\n硬伤（会坏）${broken.length} 个 · 声明落后（需人工确认）${stale.length} 个 · 完全合规 ${rows.length - broken.length - stale.length} 个\n`);
+  const unknown = rows.filter((r) => !hard(r).length && note(r).length);
+  // 汇总必须用【互斥】归类：一个插件可以同时"声明落后"和"门禁不可判定"，
+  // 各桶直接相加会得到负数（第一版就是 -13）。
+  const statusOf = (r) => (hard(r).length ? 'hard' : note(r).length ? 'unknown' : soft(r).length ? 'soft' : 'clean');
+  const counts = { hard: 0, unknown: 0, soft: 0, clean: 0 };
+  for (const r of rows) counts[statusOf(r)]++;
+  console.log(`\n硬伤（会坏）${counts.hard} · 门禁不可判定 ${counts.unknown} · 仅声明落后 ${counts.soft} · 完全合规 ${counts.clean}`);
 
   if (broken.length) {
     console.log('── 硬伤：这些会让功能直接失效，而且通常是静默的 ──');
@@ -204,6 +217,10 @@ if (AS_JSON) {
       versions.set(key, [...(versions.get(key) ?? []), r.pkg.replace('@snow-the/', '')]);
     }
     for (const [k, list] of versions) console.log(`  dshReleases=${k}: ${list.length} 个 —— ${list.join(', ')}`);
+  }
+  if (unknown.length) {
+    console.log('\n── 门禁不可判定：engines.dsh 未声明（宿主读的是它，不是 dshReleases）──');
+    console.log(`  ${unknown.map((r) => r.pkg.replace('@snow-the/', '')).join(', ')}`);
   }
 }
 
