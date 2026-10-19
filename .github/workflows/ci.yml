@@ -93,3 +93,21 @@ jobs:
 
       - name: Boot check — prove it assembles and serves
         run: node scripts/boot-check.mjs --profile web --timeout 300
+
+      # 第三层：在【正确的宿主副本】上执行每个插件的模块初始化。
+      #
+      # 注意这里必须显式指定 --host：插件把 @deepseek-ai/* 声明为 peer，自己目录里没有；
+      # Node 会一路向上查找，可能命中的是别处一份旧副本（本机就踩过：
+      # ~/.dsh/profiles/node_modules 下躺着一份 dsh-tools@0.1.5-rc.3）。
+      # esm-host-map.mjs 的钩子是【严格】的：映射不到直接报错，不回退。
+      - name: Plugin load check — every plugin entry initialises against the installed host
+        run: |
+          set -euo pipefail
+          HOST_NM="$(npm root -g)"
+          # npm 的全局布局是扁平的（@deepseek-ai/* 直接在 node_modules 下）；
+          # 若某个 npm 版本改成嵌套，这里兜一下，两种都试。
+          if [ ! -d "$HOST_NM/@deepseek-ai/dsh-tools" ] && [ -d "$HOST_NM/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-tools" ]; then
+            HOST_NM="$HOST_NM/@deepseek-ai/dsh/node_modules"
+          fi
+          echo "host node_modules: $HOST_NM"
+          node --import ./scripts/esm-host-map.mjs ./scripts/plugin-load-check.mjs --profile web --host "$HOST_NM"
