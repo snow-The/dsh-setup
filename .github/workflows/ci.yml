@@ -60,23 +60,26 @@ jobs:
         run: npm install -g @deepseek-ai/dsh@0.2.1-rc.2
 
       - name: Deploy the template into a throwaway DSH_HOME
-        env:
-          # 见下方 ~/.npmrc 的说明。这里给一份小写形式作为双保险：
-          # pnpm 在 Linux 上读的是小写 npm_config_*，而大写形式（NPM_CONFIG_*）不一定生效。
-          npm_config_frozen_lockfile: 'false'
         run: |
           set -euo pipefail
 
           # git-hosted 插件在 prepare 阶段会跑自己的 `pnpm install`，而那个 install 发生在
-          # 【临时克隆目录】里 —— profile 的 .npmrc 管不到它。所以要写到用户级 ~/.npmrc。
+          # 【临时克隆目录】里。它报 ERR_PNPM_OUTDATED_LOCKFILE：
+          #   specifiers in the lockfile don't match specifiers in package.json
+          #   * 1 dependencies were added: @deepseek-ai/dsh@>=0.2.0-rc.1
+          # 即某些插件仓库的 pnpm-lock.yaml 与 package.json 已经脱节
+          # （本次是 @snow-the/dsh-plugin-guide）。本机安装时 pnpm 会静默更新 lock，
+          # 所以看不出来；CI 里才暴露。
           #
-          # 为什么需要：有些插件仓库的 pnpm-lock.yaml 已经和 package.json 脱节
-          # （@snow-the/dsh-plugin-guide 加了 @deepseek-ai/dsh 依赖却没更新 lock）。
-          # 本机安装时 pnpm 会静默更新 lock，但在 CI 里 frozen-lockfile 默认是 true，于是：
-          #   ERR_PNPM_OUTDATED_LOCKFILE → ERR_PNPM_PREPARE_PACKAGE
-          # 这不是模板的问题，是那些插件的仓库状态问题。真正的修法是让插件仓库的 lockfile
-          # 与 package.json 一致，或者干脆不提交 lockfile（它们是要发布到 npm 的库，不是应用）。
-          echo "frozen-lockfile=false" >> "$HOME/.npmrc"
+          # 试过但【无效】的两种写法（记下来免得下次重试）：
+          #   env: NPM_CONFIG_FROZEN_LOCKFILE: 'false'   ← Linux 上是小写环境变量名
+          #   echo frozen-lockfile=false >> ~/.npmrc     ← prepare 的子进程没读这份配置
+          # 真正决定它的是 `CI` 环境变量：pnpm 在检测到 CI 时把 frozen-lockfile 默认为 true。
+          # 所以这里直接 unset CI 来关掉这个默认。
+          #
+          # 注意：这是【绕过症状】。根因在插件仓库 —— 那些库要发布到 npm，本就不该提交
+          # 会过期的 pnpm-lock.yaml，或者至少要与 package.json 同步。
+          unset CI
 
           export DSH_HOME="$RUNNER_TEMP/dsh-home"
           echo "DSH_HOME=$DSH_HOME" >> "$GITHUB_ENV"
