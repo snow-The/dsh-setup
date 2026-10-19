@@ -63,23 +63,25 @@ jobs:
         run: |
           set -euo pipefail
 
-          # git-hosted 插件在 prepare 阶段会跑自己的 `pnpm install`，而那个 install 发生在
-          # 【临时克隆目录】里。它报 ERR_PNPM_OUTDATED_LOCKFILE：
-          #   specifiers in the lockfile don't match specifiers in package.json
+          # 这里【故意不】绕过 frozen-lockfile。
+          #
+          # 2026-10-19 排查记录：git-hosted 插件在 prepare 阶段会跑自己的 `pnpm install`，
+          # 当时报
+          #   ERR_PNPM_OUTDATED_LOCKFILE
+          #     specifiers in the lockfile don't match specifiers in package.json
           #   * 1 dependencies were added: @deepseek-ai/dsh@>=0.2.0-rc.1
-          # 即某些插件仓库的 pnpm-lock.yaml 与 package.json 已经脱节
-          # （本次是 @snow-the/dsh-plugin-guide）。本机安装时 pnpm 会静默更新 lock，
-          # 所以看不出来；CI 里才暴露。
+          #   → ERR_PNPM_PREPARE_PACKAGE
+          # 根因在插件仓库：它们没有 pnpm 配置，pnpm 默认 auto-install-peers=true，把
+          # peerDependencies 里的 @deepseek-ai/dsh* 真的装进依赖图；某次提交加了 peer 却没重建
+          # lock，于是任何 frozen 安装都失败。本机 pnpm install 会静默更新 lock，所以本地
+          # 永远看不见 —— 只有 CI 和 `dsh plugin install` 会撞上。
           #
-          # 试过但【无效】的两种写法（记下来免得下次重试）：
-          #   env: NPM_CONFIG_FROZEN_LOCKFILE: 'false'   ← Linux 上是小写环境变量名
-          #   echo frozen-lockfile=false >> ~/.npmrc     ← prepare 的子进程没读这份配置
-          # 真正决定它的是 `CI` 环境变量：pnpm 在检测到 CI 时把 frozen-lockfile 默认为 true。
-          # 所以这里直接 unset CI 来关掉这个默认。
-          #
-          # 注意：这是【绕过症状】。根因在插件仓库 —— 那些库要发布到 npm，本就不该提交
-          # 会过期的 pnpm-lock.yaml，或者至少要与 package.json 同步。
-          unset CI
+          # 已修：15 个插件仓库全部加上 auto-install-peers=false 并重建了 lock。
+          # 试过但无效的两种绕过（记下来免得下次重试）：
+          #   env NPM_CONFIG_FROZEN_LOCKFILE=false   ← Linux 上 pnpm 读小写名
+          #   echo frozen-lockfile=false >> ~/.npmrc ← prepare 的子进程不读这份
+          #   unset CI                               ← 能绕过，但会掩盖同类缺陷复发
+          # 所以现在保持默认：一旦某个插件仓库的 lock 再次脱节，这里就该红。
 
           export DSH_HOME="$RUNNER_TEMP/dsh-home"
           echo "DSH_HOME=$DSH_HOME" >> "$GITHUB_ENV"
