@@ -211,6 +211,8 @@ pnpm derive      # 改完 plugins.intent.json 后重新生成（= derive-profile
 pnpm check       # 只跑模板一致性检查
 pnpm selftest    # 只跑两个变异自检
 pnpm boot:check  # 真启动一次已部署的 profile（需要先 .\setup.ps1 部署过）
+                 # 默认在临时 DSH_HOME 里起（profile 配置复制一份，写不落到活配置上）；
+                 # 想直接在活 home 上跑就 node scripts/boot-check.mjs --live
 ```
 
 ### 为什么需要 `boot:check` —— 一个实测出来的层次差异

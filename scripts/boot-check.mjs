@@ -26,6 +26,9 @@
  */
 import { spawn, execFileSync } from 'node:child_process';
 import { createServer, Socket } from 'node:net';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 const argv = process.argv.slice(2);
 const argOf = (name, dflt) => {
@@ -97,12 +100,65 @@ const started = Date.now();
 // 和 shell:true 一起传 —— Node 会报 DEP0190（参数不转义，存在注入风险），而且这条警告
 // 会混进 stderr 污染的判定输出（本仓库实测：汇总行显示成了这条警告）。
 // 所以 Windows 下自己拼一条命令行、显式加引号，只传字符串；POSIX 下仍然数组直传。
-// ---- 同一份 profile 只允许一个宿主（2026-10-27 实伤）----
+// ---- 隔离 home：默认不在活配置上启动（2026-10-27 实伤）----
 // 两个宿主同时跑同一份 profile 时，plugin-manager 的读-改-写锁只在本进程内，
 // 于是后起的那个可能把 cordis.patch.yml 截断成 1 字节就没了下文 —— 实测
 // 17:39:22 还是好文件，17:39:23 变成空行，随后每次启动都报
 // "must be a top-level YAML array"。一次检查把一个可用配置跑成半死，这是检查器
-// 自己的 bug。所以默认拒绝在已有实例时启动，要看启动层就加 --concurrent。
+// 自己的 bug。
+//
+// 所以默认在临时 DSH_HOME 里启动：profile 的**配置文件复制一份**（检查器要验的是
+// 这份内容），插件本体和宿主解析层用 junction 指回生产（只读使用），凭据与 settings
+// 复制过去好让 provider 起得来。写只落在临时目录，检查完删掉。
+// `--live` 可以让它在生产 home 里启动 —— 那时才需要"已有实例就拒绝"这条闸。
+function makeIsolatedHome() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-bootcheck-'));
+  const src = path.join(LIVE_HOME, 'profiles', PROFILE);
+  const dst = path.join(root, 'profiles', PROFILE);
+  fs.mkdirSync(dst, { recursive: true });
+  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
+    if (e.name === 'node_modules') continue;
+    if (e.isFile()) fs.copyFileSync(path.join(src, e.name), path.join(dst, e.name));
+  }
+  for (const f of ['cordis.patch.yml', 'settings.yaml', '.credentials.yaml']) {
+    const s = path.join(LIVE_HOME, f);
+    if (fs.existsSync(s)) fs.copyFileSync(s, path.join(root, f));
+  }
+  const kind = process.platform === 'win32' ? 'junction' : 'dir';
+  const link = (target, at) => { try { fs.symlinkSync(target, at, kind); return null; } catch (e) { return e.message; } };
+  const notes = [];
+  const e1 = link(path.join(src, 'node_modules'), path.join(dst, 'node_modules'));
+  if (e1) notes.push(`插件 node_modules 没链上: ${e1}`);
+  // 宿主解析层（活环境里是 profiles/node_modules 的 junction），照着链一份
+  const liveResolve = path.join(LIVE_HOME, 'profiles', 'node_modules');
+  if (fs.existsSync(liveResolve)) {
+    try {
+      const target = fs.realpathSync(liveResolve);
+      const e2 = link(target, path.join(root, 'profiles', 'node_modules'));
+      if (e2) notes.push(`宿主解析层没链上: ${e2}`);
+    } catch (e) { notes.push(`宿主解析层读不到: ${e.message}`); }
+  } else {
+    notes.push('活环境没有 profiles/node_modules（插件会按 profile 自己的 node_modules 解析）');
+  }
+  return { root, notes };
+}
+
+const LIVE_HOME = process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh');
+const LIVE_MODE = argv.includes('--live');
+const CONCURRENT_OK = argv.includes('--concurrent');
+const RUNNING = otherHosts();
+
+let ISOLATED = null;
+if (!LIVE_MODE) {
+  ISOLATED = makeIsolatedHome();
+} else if (RUNNING.length && !CONCURRENT_OK) {
+  console.error(`拒绝启动: 这台机器上已有 ${RUNNING.length} 个 dsh 宿主在跑同一份 profile。`);
+  for (const h of RUNNING) console.error(`  pid ${h.pid}: ${h.cmd}`);
+  console.error('两个宿主同时写 cordis.patch.yml 会把它截断（2026-10-27 实测过），所以 --live 默认不启动。');
+  console.error('去掉 --live 就是隔离启动（推荐）；确要并发就加 --concurrent。');
+  process.exit(2);
+}
+
 function otherHosts() {
   try {
     if (process.platform === 'win32') {
@@ -123,26 +179,20 @@ function otherHosts() {
   } catch { return []; }
 }
 
-const CONCURRENT_OK = argv.includes('--concurrent');
-const RUNNING = otherHosts();
-if (RUNNING.length && !CONCURRENT_OK) {
-  console.error(`拒绝启动: 这台机器上已有 ${RUNNING.length} 个 dsh 宿主在跑同一份 profile。`);
-  for (const h of RUNNING) console.error(`  pid ${h.pid}: ${h.cmd}`);
-  console.error('两个宿主同时写 cordis.patch.yml 会把它截断（2026-10-27 实测过），所以这里默认不启动。');
-  console.error('确有必要就加 --concurrent；想验启动层而不碰正在跑的实例，先把 GUI 关掉。');
-  process.exit(2);
-}
-
 const dshArgs = ['--profile', PROFILE, '--no-open', '--port', String(PORT)];
+// 隔离模式下把 DSH_HOME 指到临时目录 —— 这是整件事的关键一行：写落在副本上。
+const childEnv = ISOLATED ? { ...process.env, DSH_HOME: ISOLATED.root } : process.env;
 const quoteForShell = (s) => (/[\s"]/.test(String(s)) ? `"${String(s).replace(/"/g, '\\"')}"` : String(s));
 const child = process.platform === 'win32'
   ? spawn([DSH, ...dshArgs].map(quoteForShell).join(' '), {
     shell: true,
+    env: childEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   : spawn(DSH, dshArgs, {
     shell: false,
     detached: true,
+    env: childEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -219,6 +269,7 @@ const benignErrors = classified.filter((c) => c.benign);
 const pass = alive && listened && realErrors.length === 0 && page.boots === true;
 const result = {
   profile: PROFILE,
+  isolated: ISOLATED ? { home: ISOLATED.root, notes: ISOLATED.notes } : null,
   host: { cmd: DSH, version: HOST_VERSION, onPath: HOST_CANDIDATES, otherInstalls: HOST_SHADOWED },
   port: PORT,
   alive,
@@ -235,6 +286,12 @@ if (AS_JSON) {
 } else {
   console.log(`profile: ${PROFILE}   端口: ${PORT}`);
   console.log(`宿主       ${DSH}   版本 ${HOST_VERSION}`);
+  if (ISOLATED) {
+    console.log(`隔离 home  ${ISOLATED.root}（写落在这里，活配置不动）`);
+    for (const n of ISOLATED.notes) console.log(`    · ${n}`);
+  } else {
+    console.log(`  ⚠ --live：直接在生产 home 上启动，会写 ${LIVE_HOME}`);
+  }
   if (HOST_SHADOWED.length) console.log(`  ⚠ PATH 上还有 ${HOST_SHADOWED.length} 份 dsh（本次没用到）: ${HOST_SHADOWED.join(' , ')}`);
   console.log(`  进程存活   ${alive}`);
   console.log(`  端口监听   ${listened}`);
@@ -257,5 +314,10 @@ try {
   if (process.platform === 'win32') execFileSync('taskkill', ['/T', '/F', '/PID', String(child.pid)], { stdio: 'ignore' });
   else process.kill(-child.pid, 'SIGKILL');
 } catch { /* 可能已自行退出 */ }
+
+// 检查完把临时 home 删掉（写都落在它上面）
+if (ISOLATED) {
+  try { fs.rmSync(ISOLATED.root, { recursive: true, force: true }); } catch (e) { console.log('  (临时 home 留给排查: ' + ISOLATED.root + ' —— ' + e.message + ')'); }
+}
 
 process.exit(pass ? 0 : 1);
