@@ -7,6 +7,11 @@
 # has to be re-checked against the next host generation. A template that ships
 # with opinions has to maintain them.
 #
+# 2026-10-27 明确否掉过一次「把本机那 4 条搬进模板」的提议（permission presets /
+# llm-pi-ai 的模型路由 / agent-default-model / ui-theme）：这些是**每台机器自己的
+# 选择**（谁用哪家模型、默认给多少权限、明暗主题），不是模板该替人做的决定。
+# 别再提这件事 —— 模板只负责「装得起来」，不负责「替你调好」。
+#
 # ── What does NOT belong here: external MCP servers ──────────────────────────
 # An MCP mount pays its tool schemas in EVERY request, whether or not that turn
 # touches the service. The 207-tool reverse-engineering mount was measured at
