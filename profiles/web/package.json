@@ -5,7 +5,7 @@
   "dependencies": {
     "@linxin666/dsh-session-archive": "0.4.7",
     "@linxin666/dsh-web-all": "0.4.7",
-    "@mars-sea/dsh-commandcode-provider": "0.14.3",
+    "@mars-sea/dsh-commandcode-provider": "0.15.4",
     "@snow-the/dsh-acp-memory": "github:snow-The/dsh-acp-memory",
     "@snow-the/dsh-browser": "github:snow-The/dsh-browser",
     "@snow-the/dsh-busyloop": "github:snow-The/dsh-busyloop",

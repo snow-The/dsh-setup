@@ -27,11 +27,11 @@
     },
     {
       "pkg": "@mars-sea/dsh-commandcode-provider",
-      "spec": "0.14.3",
-      "gap": "它有 engines.dsh（0.2.0-rc.2 || 0.2.1-rc.2，门禁能判），但 peerDependencies 仍硬要 @deepseek-ai/dsh-client-ui-slots 与 @deepseek-ai/dsh-client-ui-primitives —— 这两个包在 0.2.1 已删除（实现并入 dsh-client-ui-renderer）",
-      "effect": "peer 不可满足，靠 profile 的 autoInstallPeers:false 才没在安装期炸；0.14.2 与 0.14.3 的 peer/engines 元数据逐字相同，所以升补丁不改变这一点",
-      "compensate": "精确钉版本；同代审计逐条检查它 import 的包在宿主里存在；在 0.2.1-rc.2 上跑过真启动与 17/17 模块加载",
-      "recorded": "2026-10-19"
+      "spec": "0.15.4",
+      "gap": "peerDependencies 仍硬要 @deepseek-ai/dsh-client-ui-slots 与 @deepseek-ai/dsh-client-ui-primitives —— 这两个包在 0.2.1 已删除（实现并入 dsh-client-ui-renderer）",
+      "effect": "peer 不可满足，靠 profile 的 autoInstallPeers:false 才没在安装期炸。engines.dsh 这一半已在 0.15.4 修好：0.14.3 写的是 `0.2.0-rc.2 || 0.2.1-rc.2`（升到 rc.3 时被门禁整包拒载、连 patch 条目都消失），0.15.4 改成 `>=0.2.1-rc.2 <0.2.2-0`，rc.3 可通过",
+      "compensate": "精确钉版本；同代审计逐条检查它 import 的包在宿主里存在；在 0.2.1-rc.2 与 0.2.1-rc.3 上都跑过装配（stderr 为空、348 条 loader 条目）与真启动 PASS",
+      "recorded": "2026-10-27"
     }
   ]
 }

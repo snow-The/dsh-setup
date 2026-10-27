@@ -14,7 +14,7 @@
     "runtime 是这份 profile 瞄准的宿主世代。它不写进产物，只用于推导期的自检：",
     "凡是能从 npm 元数据判定 peer 的都在 derive 里核对，判定不了的（github:/file: 依赖）留给宿主门禁。"
   ],
-  "runtime": "0.2.1-rc.2",
+  "runtime": "0.2.1-rc.3",
 
   "$comment_hostBundles": [
     "由宿主自己提供、不该出现在 dependencies 里的层。",
@@ -36,7 +36,7 @@
   "npm": {
     "@linxin666/dsh-session-archive": "0.4.7",
     "@linxin666/dsh-web-all": "0.4.7",
-    "@mars-sea/dsh-commandcode-provider": "0.14.3",
+    "@mars-sea/dsh-commandcode-provider": "0.15.4",
     "@tt-a1i/archify-dsh": "1.0.0",
     "dsh-undo-savepoint": "0.4.10",
     "dshmarket": "1.66.42"
