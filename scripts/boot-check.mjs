@@ -37,6 +37,34 @@ const TIMEOUT_S = Number(argOf('timeout', '180'));
 const DSH = argOf('dsh', 'dsh');     // 允许指定宿主可执行文件（测试/CI 用）
 const AS_JSON = argv.includes('--json');
 
+// ---- 到底是哪一份宿主跑的这一轮（2026-10-27 补）----
+// 一个会「静默用错 dsh」的检查等于在说谎。实测：PATH 上排着一份陈旧的 pnpm 全局
+// dsh@0.1.2-alpha.5，把 npm 全局的 0.2.1-rc.2 遮在后面；同一个 profile，一份
+// PASS、另一份连装配都过不去（module fallback 拒绝真实的 commander 目录）。
+// 所以这里把「跑的是谁、还有谁存在」直接打出来，别让它成为一个隐变量。
+function hostVersion() {
+  try {
+    const out = execFileSync([DSH, '--version'].join(' '), {
+      encoding: 'utf8', shell: true, stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return out.trim().split(/\r?\n/).filter(Boolean).pop() ?? '(no output)';
+  } catch (e) { return `(unreadable: ${String(e.message).split('\n')[0].slice(0, 70)})`; }
+}
+function hostCandidates() {
+  const [cmd, args] = process.platform === 'win32' ? ['where', ['dsh']] : ['which', ['-a', 'dsh']];
+  try {
+    return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+      .split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  } catch { return []; }
+}
+const HOST_VERSION = hostVersion();
+const HOST_CANDIDATES = hostCandidates();
+// Windows 的 `where dsh` 会把同一个安装的 dsh / dsh.cmd / dsh.ps1 都列出来，
+// 按目录去重才谈得上「另一份宿主」。
+const dirOf = (p) => p.replace(/[\\/][^\\/]+$/, '');
+const HOST_DIRS = [...new Set(HOST_CANDIDATES.map(dirOf))];
+const HOST_SHADOWED = HOST_DIRS.slice(1);
+
 /** 让操作系统给一个空闲端口，避免撞上正在跑的那个实例。 */
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -69,6 +97,42 @@ const started = Date.now();
 // 和 shell:true 一起传 —— Node 会报 DEP0190（参数不转义，存在注入风险），而且这条警告
 // 会混进 stderr 污染的判定输出（本仓库实测：汇总行显示成了这条警告）。
 // 所以 Windows 下自己拼一条命令行、显式加引号，只传字符串；POSIX 下仍然数组直传。
+// ---- 同一份 profile 只允许一个宿主（2026-10-27 实伤）----
+// 两个宿主同时跑同一份 profile 时，plugin-manager 的读-改-写锁只在本进程内，
+// 于是后起的那个可能把 cordis.patch.yml 截断成 1 字节就没了下文 —— 实测
+// 17:39:22 还是好文件，17:39:23 变成空行，随后每次启动都报
+// "must be a top-level YAML array"。一次检查把一个可用配置跑成半死，这是检查器
+// 自己的 bug。所以默认拒绝在已有实例时启动，要看启动层就加 --concurrent。
+function otherHosts() {
+  try {
+    if (process.platform === 'win32') {
+      const ps = 'Get-CimInstance Win32_Process -Filter "Name=\'node.exe\'" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress';
+      const raw = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      const rows = JSON.parse(raw || '[]');
+      return (Array.isArray(rows) ? rows : [rows]).filter((r) => {
+        const c = (r.CommandLine ?? '').replace(/\\+/g, '/');
+        return c && !c.includes('subprocess-local') && /\bweb\b/.test(c)
+          && (c.includes('dsh/lib/bin.js') || c.includes('npx-cli.js'));
+      }).map((r) => ({ pid: r.ProcessId, cmd: String(r.CommandLine).slice(0, 110) }));
+    }
+    const out = execFileSync('ps', ['-eo', 'pid,args'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return out.split('\n')
+      .filter((l) => /\bweb\b/.test(l) && /dsh\/lib\/bin\.js|bin\.js web/.test(l) && !l.includes('subprocess-local'))
+      .map((l) => { const m = l.trim().match(/^(\d+)\s+(.*)$/); return m ? { pid: Number(m[1]), cmd: m[2].slice(0, 110) } : null; })
+      .filter(Boolean);
+  } catch { return []; }
+}
+
+const CONCURRENT_OK = argv.includes('--concurrent');
+const RUNNING = otherHosts();
+if (RUNNING.length && !CONCURRENT_OK) {
+  console.error(`拒绝启动: 这台机器上已有 ${RUNNING.length} 个 dsh 宿主在跑同一份 profile。`);
+  for (const h of RUNNING) console.error(`  pid ${h.pid}: ${h.cmd}`);
+  console.error('两个宿主同时写 cordis.patch.yml 会把它截断（2026-10-27 实测过），所以这里默认不启动。');
+  console.error('确有必要就加 --concurrent；想验启动层而不碰正在跑的实例，先把 GUI 关掉。');
+  process.exit(2);
+}
+
 const dshArgs = ['--profile', PROFILE, '--no-open', '--port', String(PORT)];
 const quoteForShell = (s) => (/[\s"]/.test(String(s)) ? `"${String(s).replace(/"/g, '\\"')}"` : String(s));
 const child = process.platform === 'win32'
@@ -155,6 +219,7 @@ const benignErrors = classified.filter((c) => c.benign);
 const pass = alive && listened && realErrors.length === 0 && page.boots === true;
 const result = {
   profile: PROFILE,
+  host: { cmd: DSH, version: HOST_VERSION, onPath: HOST_CANDIDATES, otherInstalls: HOST_SHADOWED },
   port: PORT,
   alive,
   listened,
@@ -169,6 +234,8 @@ if (AS_JSON) {
   console.log(JSON.stringify(result, null, 2));
 } else {
   console.log(`profile: ${PROFILE}   端口: ${PORT}`);
+  console.log(`宿主       ${DSH}   版本 ${HOST_VERSION}`);
+  if (HOST_SHADOWED.length) console.log(`  ⚠ PATH 上还有 ${HOST_SHADOWED.length} 份 dsh（本次没用到）: ${HOST_SHADOWED.join(' , ')}`);
   console.log(`  进程存活   ${alive}`);
   console.log(`  端口监听   ${listened}`);
   console.log(`  启动耗时   ${result.elapsedSeconds}s`);
