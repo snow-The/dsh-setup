@@ -23,10 +23,10 @@
     "@snow-the/dsh-snapshot": "github:snow-The/dsh-snapshot",
     "@snow-the/dsh-w8-sandbox": "github:snow-The/dsh-w8-sandbox",
     "@tt-a1i/archify-dsh": "1.0.0",
-    "aegis": "github:GanyuanRan/Aegis#v2.13.0",
+    "aegis": "github:GanyuanRan/Aegis#v2.14.2",
     "dsh-ark-plan": "github:snow-The/dsh-ark-plan",
-    "dsh-undo-savepoint": "0.4.10",
-    "dshmarket": "1.66.42"
+    "dsh-undo-savepoint": "0.5.0",
+    "dshmarket": "1.71.1"
   },
   "pnpm": {
     "overrides": {
