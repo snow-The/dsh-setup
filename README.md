@@ -122,10 +122,21 @@ dsh web
 | `@linxin666/dsh-session-archive` | 会话归档 |
 | `@mars-sea/dsh-commandcode-provider` | commandcode 模型通道 |
 | `dshmarket` | 插件市场 |
-| `aegis` | Aegis 方法论（钉 `#v2.12.0`：该 tag 才适配 0.2.0） |
+| `aegis` | Aegis 方法论（github tag 钉版本，不跟浮动分支） |
 | `@tt-a1i/archify-dsh` | 架构图生成 |
-| `dsh-undo-savepoint` | 配置撤销/回滚快照（已上 npm） |
+| `dsh-undo-savepoint` | 配置改动即快照 + 撤销/重做 + 安全模式（第三方，**不是**我们的 `@snow-the/dsh-snapshot`；分工见下节） |
 | `dsh-ark-plan` | Volcano Ark 计划 API 激活 |
+
+### 两个"快照"插件怎么分工（别把它们当重复件）
+
+| | `@snow-the/dsh-snapshot`（自研） | `dsh-undo-savepoint`（第三方 `lire1131`） |
+|---|---|---|
+| 触发 | 手动 | 配置一改就自动（watch 1.5s 防抖） |
+| 粒度 | 整包 `~/.dsh`（排除 node_modules），tar.gz + sha256 + 轮转 | 单个配置文件，按次留档 |
+| 能做什么 | `snapshot_backup` / `snapshot_list` / `snapshot_restore` | `undo_restore`（按次回退）/ redo / `undo_safe_mode` / `undo_doctor` / `undo_scan` |
+| 救不救得了起不来的 DSH | 救不了（它自己是插件，得能启动才跑） | **救得了**：带离线 CLI 与 GUI |
+
+保留第三方的那个是因为最后一列：2026-10-27 它两次在 DSH 起不来的情况下把整份 `cordis.patch.yml` 还了回来。代价是它的自愈写出有过破坏性（`cleanDanglingInserts` 会把 patch 层写成 1 字节），已记进 `third-party-gaps.json` 并在配置侧绕开。
 
 ### 外部服务：skill + CLI，不挂 MCP
 
