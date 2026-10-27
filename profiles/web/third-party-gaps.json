@@ -32,6 +32,14 @@
       "effect": "peer 不可满足，靠 profile 的 autoInstallPeers:false 才没在安装期炸。engines.dsh 这一半已在 0.15.4 修好：0.14.3 写的是 `0.2.0-rc.2 || 0.2.1-rc.2`（升到 rc.3 时被门禁整包拒载、连 patch 条目都消失），0.15.4 改成 `>=0.2.1-rc.2 <0.2.2-0`，rc.3 可通过",
       "compensate": "精确钉版本；同代审计逐条检查它 import 的包在宿主里存在；0.15.4 在 0.2.1-rc.3 上跑过装配（stderr 为空、348 条 loader 条目）与真启动 PASS",
       "recorded": "2026-10-27"
+    },
+    {
+      "pkg": "dsh-undo-savepoint",
+      "spec": "0.5.0",
+      "gap": "自愈写出有破坏性：lib/health.mjs 的 cleanDanglingInserts 在判定到「悬空 insert 键」时把整个 patch 层重写成 keep.join(换行) 再加一个换行 —— keep 为空时写出的就是 1 个字节。这一条既能进安全模式，也能被 install/patchReload 触发",
+      "effect": "不是门禁问题而是数据损坏：一次自愈就能让整个 profile 起不来，而报错指向 YAML 形状（overlay ... must be a top-level YAML array），完全不提这个插件，排错会一路走偏。2026-10-27 实测两回：17:08 与 17:39:23",
+      "compensate": "profile 的 cordis.patch.yml 不使用 insert: 包裹形式（authorization 改成顶层 id+name 声明），没有可误判的对象；原件仍在 undo-snapshots/auto/safe-mode-backup-*.yml，可整份还回",
+      "recorded": "2026-10-27"
     }
   ]
 }
