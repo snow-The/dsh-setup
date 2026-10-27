@@ -45,6 +45,7 @@ const CHECKS = {
   '2a': '全部 git 依赖都有 allowBuilds 条目',
   '2b': 'allowBuilds 不含 hash 形式的键',
   '2c': 'allowBuilds 不含 sha 为空的坏条目',
+  '2d': '.npmrc 关掉 peer 自动安装（干净安装不依赖 pnpm 默认值）',
   '3': 'cordis.patch.yml 无重复声明',
   '3a': 'cordis.patch.yml 未挂载外部 MCP（外部服务走 skill + CLI）',
   '4': 'cordis.yml 是空列表',
@@ -232,6 +233,24 @@ else {
   const emptySha = [...allowed].filter((k) => /tar\.gz\/$/.test(k));
   if (emptySha.length) bad('2c', `allowBuilds 含 sha 为空的坏条目: ${emptySha.join(', ')}`);
   else ok('2c', 'allowBuilds 不含 sha 为空的条目');
+}
+
+// ---------- 2d. .npmrc：必须自己关掉 peer 自动安装 ----------
+// 2026-10-28 实测：只在 pnpm-workspace.yaml 里写 autoInstallPeers: false 不够 —— 那条
+// 要 pnpm 以 workspace 模式读到该文件才生效。一旦安装从别的 cwd 发起，或用户级 pnpm
+// 配置把 auto-install-peers 打开（pnpm 10 的默认值就是 true），pnpm 就去装 peer，撞上
+// 这一代宿主的分发形态：@deepseek-ai/dsh@>=0.2.1、@deepseek-ai/dsh-llm@>=0.2.1 <0.2.2
+// 这类 stable-only 范围，而 npm 上只有 prerelease → ERR_PNPM_NO_MATCHING_VERSION，
+// 干净机器直接死在安装步骤。
+// 修法是不装 peer，而不是给宿主包打 override —— 那会在 profile 里再造一份副本，正是
+// [1d] 拦着的事。
+const npmrc = read(path.join(PROFILE, '.npmrc'));
+if (npmrc === null) {
+  bad('2d', 'profiles/web/.npmrc 缺失 —— 用户级 pnpm 配置一旦打开 auto-install-peers，干净机器安装会直接失败');
+} else if (!/^\s*auto-install-peers\s*=\s*false\s*$/m.test(npmrc)) {
+  bad('2d', 'profiles/web/.npmrc 没有 `auto-install-peers=false`（pnpm-workspace.yaml 里的那条只在 workspace 模式生效，不够）');
+} else {
+  ok('2d', '.npmrc 关掉了 peer 自动安装（干净安装不再取决于 pnpm 的默认值）');
 }
 
 // ---------- 3. patch 层 ----------

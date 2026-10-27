@@ -28,21 +28,23 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-setup-selftest-'));
 
-/** 把模板骨架复制到 dst（只复制检查器会读的文件）。 */
+/** 把模板骨架复制到 dst。
+ *
+ * 2026-10-28 起改成**整目录复制**，不再维护白名单：加了 profiles/web/.npmrc 之后，
+ * 白名单版本没带上它，而失败表现是「变异用例 rmSync 直接 ENOENT」—— 更糟的情况是
+ * 变异用例写得宽容一点，检查就静默测了个不存在的文件而"通过"。漏文件的代价必须是
+ * 报错，不能是绿灯。 */
 function scaffold() {
   const dst = fs.mkdtempSync(path.join(TMP, 'case-'));
   fs.mkdirSync(path.join(dst, 'profiles', 'web'), { recursive: true });
   fs.mkdirSync(path.join(dst, 'scripts'), { recursive: true });
-  for (const rel of [
-    'profiles/web/package.json',
-    'profiles/web/pnpm-workspace.yaml',
-    'profiles/web/cordis.patch.yml',
-    'profiles/web/cordis.yml',
-    'profiles/web/third-party-gaps.json',
-    'setup.ps1',
-    'setup.sh',
-    'README.md',
-  ]) {
+  const srcProfile = path.join(ROOT, 'profiles', 'web');
+  for (const name of fs.readdirSync(srcProfile)) {
+    if (name === 'node_modules') continue;          // 装出来的，不属于模板
+    const s = path.join(srcProfile, name);
+    if (fs.statSync(s).isFile()) fs.copyFileSync(s, path.join(dst, 'profiles', 'web', name));
+  }
+  for (const rel of ['setup.ps1', 'setup.sh', 'README.md']) {
     fs.copyFileSync(path.join(ROOT, rel), path.join(dst, rel));
   }
   fs.copyFileSync(path.join(ROOT, 'scripts', 'check-template.mjs'), path.join(dst, 'scripts', 'check-template.mjs'));
@@ -176,6 +178,14 @@ const cases = [
     },
   },
   // ---- 3 / 4: patch 层 ----
+  {
+    // 删掉 .npmrc 就等于把「不装 peer」交还给 pnpm 的默认值（pnpm 10 = true）。
+    // 实测一开就 ERR_PNPM_NO_MATCHING_VERSION，所以这条必须真的落闸。
+    label: '删掉 profiles/web/.npmrc',
+    expectFail: true,
+    expectId: '2d',
+    mutate: (d) => fs.rmSync(path.join(d, 'profiles', 'web', '.npmrc')),
+  },
   {
     label: 'cordis.patch.yml 里制造重复声明',
     expectFail: true,

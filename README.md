@@ -41,6 +41,7 @@ dsh-setup/
     │   ├── cordis.patch.yml     # 用户 patch 层（默认空 `[]`，见「外部服务不进 MCP」）
     │   ├── cordis.yml           # profile 根（空列表，勿改）
     │   ├── third-party-gaps.json # 第三方「门禁无从判定」的记录（check-template [8] 校验它与依赖一致）
+    │   ├── .npmrc               # 关掉 peer 自动安装（[2d] 校验；见「干净安装为什么会死在 peer 上」）
     │   └── pnpm-workspace.yaml  # pnpm 配置（allowBuilds 段是生成物，其余手写）
     └── web.local/               # 站点覆盖层（可选，部署时递归合并到模板之上）
 ```
@@ -451,11 +452,44 @@ cd <dsh-setup目录> && .\setup.ps1    # 或 ./setup.sh
 |---|---|
 | 启动后插件一个都没加载 | 宿主版本低于 0.2.0，或某个 peer 范围不满足。看启动时的 stderr，宿主会逐个打印被禁用的插件及原因。 |
 | `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED` | `profiles/web/pnpm-workspace.yaml` 的 `allowBuilds` 缺了某个 git 依赖。跑 `npm run check` 会直接指出来。 |
+| `ERR_PNPM_NO_MATCHING_VERSION` 指向 `@deepseek-ai/dsh*` | pnpm 在装 peer，而这一代宿主只发 prerelease。见下一节 |
 | `pnpm install` 提示忽略 build scripts | pnpm 10 默认禁止依赖的 postinstall。模板已放行 `ssh2` / `node-pty` / `cpu-features` / `cloudflared`；新增带原生编译的依赖时记得同步。 |
 | 冒烟测试 `[FAIL]` | 某 bundle 缺可加载入口。先重跑 `pnpm install`；git 依赖需要能访问 GitHub。 |
 | 装配验证 `[STDERR]` | 宿主在解析 profile 时报警告。最常见：`patch: entry "xxx" not found` —— `cordis.patch.yml` 里那行缺了 `- insert:` 包裹（裸 `- id:` 只能配置已存在的条目）。**注意 `dsh --dump-config` 的退出码仍是 0**，所以只查退出码永远抓不到这类问题。确认无误可加 `-SkipSmoke` 跳过。 |
 | 兼容性预检报某插件会被禁用 | 该插件的 peer 范围不满足当前宿主。按提示升级该插件或升级宿主。 |
 | git 依赖 clone 慢/失败 | 需要能访问 GitHub；可配代理。 |
+
+### 干净安装为什么会死在 peer 上（`ERR_PNPM_NO_MATCHING_VERSION`）
+
+现象：全新机器跑 `.\setup.ps1`，安装步骤报
+
+```
+ERR_PNPM_NO_MATCHING_VERSION  No matching version found for @deepseek-ai/dsh-llm@>=0.2.1 <0.2.2
+```
+
+原因不是模板少了一个包，而是 **pnpm 去装了 peer**。这一代宿主的插件大量声明
+`@deepseek-ai/dsh*` 的 peer，其中有稳定版范围（`>=0.2.1`、`>=0.2.1 <0.2.2`），
+而 npm 上这些包**只有 prerelease**（`latest=0.0.1-rc.1`、`next=0.2.1-rc.4`）。
+semver 的 stable-only 范围排除一切预发布版 → 无解。
+
+这些包本来就由宿主自己带着（profile 的 `profiles/node_modules` 解析层指过去），
+所以正确的做法是**不装 peer**：
+
+- `profiles/web/pnpm-workspace.yaml`：`autoInstallPeers: false`（workspace 模式下生效）
+- `profiles/web/.npmrc`：`auto-install-peers=false` + `strict-peer-dependencies=false`
+  —— 项目级 `.npmrc` 不需要 workspace 模式、且优先级高于用户级配置，这才是
+  「用户机器上的 pnpm 全局配置把默认值打开」时的真正保险。`check-template [2d]` 会验证它。
+
+**不要**用 `pnpm.overrides` 给 `@deepseek-ai/dsh-llm` 之类钉版本：那会在 profile 里
+再造一份宿主包的副本，正是 `[1d]` 拦着的 0.1.x 时代做法。
+
+验证方式（不改自己机器）：
+
+```bash
+T=$(mktemp -d) && mkdir -p "$T/profiles/web"
+cp profiles/web/{package.json,pnpm-workspace.yaml,.npmrc,cordis.yml,cordis.patch.yml,third-party-gaps.json} "$T/profiles/web/"
+cd "$T/profiles/web" && pnpm install        # 用空 lockfile 覆盖真实解析路径
+```
 | 脚本提示「本地与远端不一致」 | 模板可能过期：先 `git pull` 再跑；确认无误可加 `-Force`。 |
 
 ## 注意
