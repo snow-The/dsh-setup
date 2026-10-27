@@ -37,7 +37,7 @@ dsh-setup/
     ├── web/
     │   ├── plugins.intent.json  # ← 唯一事实源：要哪些插件、什么版本、按什么顺序挂载
     │   ├── package.json         # 【生成物】依赖 + bundles，勿手改
-    │   ├── cordis.patch.yml     # 用户 patch 层（mslearn MCP 等）
+    │   ├── cordis.patch.yml     # 用户 patch 层（默认空 `[]`，见「外部服务不进 MCP」）
     │   ├── cordis.yml           # profile 根（空列表，勿改）
     │   ├── third-party-gaps.json # 第三方「门禁无从判定」的记录（check-template [8] 校验它与依赖一致）
     │   └── pnpm-workspace.yaml  # pnpm 配置（allowBuilds 段是生成物，其余手写）
@@ -126,7 +126,22 @@ dsh web
 | `@tt-a1i/archify-dsh` | 架构图生成 |
 | `dsh-undo-savepoint` | 配置撤销/回滚快照（已上 npm） |
 | `dsh-ark-plan` | Volcano Ark 计划 API 激活 |
-| `mcp-mslearn`（patch 插入） | Microsoft Learn 官方文档 MCP（免费，无需 key） |
+
+### 外部服务：skill + CLI，不挂 MCP
+
+第三方 MCP 服务器的 tool schema 是**每一次请求**的常驻开销，跟这一轮用不用得着毫无关系。实测过的代价：REA 那个 207 工具挂载约 **3.1 MB schema / 请求**，即使一轮完全不碰逆向也在付；Microsoft Learn 只有 3 个工具，但同样是每一轮的固定税。
+
+所以外部服务的形状是 **skill + CLI**：skill 文本按需加载、说清什么时候怎么调；调用就是一条普通 shell 命令；不调用就一分不付。Microsoft Learn 是现成例子 —— skill 是 `microsoft-docs`，命令是官方 CLI：
+
+```sh
+npx -y @microsoft/learn-cli search "azure functions timeout"
+npx -y @microsoft/learn-cli fetch "<url>" --section "Configure" --max-chars 4000
+npx -y @microsoft/learn-cli code-search "cosmos db change feed"
+```
+
+它连的是同一个官方端点（`https://learn.microsoft.com/api/mcp`），结果和 MCP 一致 —— 差别只是由 CLI 自己发 MCP 调用、再把 markdown 打出来。
+
+只在**工具必须参与交互式 tool-calling 循环**、逐步 shell 明显更差时才挂 MCP。模板检查 `[3a]` 会把挂 MCP 的 patch 层判成失败。
 
 ### 已移除（不要再加回来）
 
@@ -141,6 +156,7 @@ dsh web
 | `@openviking/dsh-memory-plugin` | peer 是 `>=0.1.0-rc.6 <0.2.0`，在 0.2.0 宿主上**必然 ERESOLVE** |
 | `dsh-web` · `@linxin666/dsh-web-ui-all` · `@linxin666/dsh-client-ui-skin-center` | 均被 `@linxin666/dsh-web-all` 收拢 |
 | `@snow-the/dsh-ui-shim` | **已退役，见下** |
+| `mcp-mslearn`（patch 插入的 MCP 行） | 外部 MCP 的 schema 常驻每次请求；改用 `microsoft-docs` skill + `@microsoft/learn-cli`。见上节 |
 
 ### `dsh-ui-shim` 为什么退役
 

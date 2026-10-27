@@ -180,9 +180,21 @@ const cases = [
     label: 'cordis.patch.yml 里制造重复声明',
     expectFail: true,
     expectId: '3',
+    // 模板的 patch 层现在是空的 `[]`，所以要自己造出"同一 id 声明两次"才触发。
     mutate: (d) => {
       const p = path.join(d, 'profiles', 'web', 'cordis.patch.yml');
-      fs.appendFileSync(p, "\n- insert:\n    - id: mcp-mslearn\n      name: '@deepseek-ai/dsh-mcp-client'\n");
+      fs.appendFileSync(p, "\n- insert:\n    - id: dup-demo\n      name: '@example/dup'\n- insert:\n    - id: dup-demo\n      name: '@example/dup'\n");
+    },
+  },
+  {
+    // 判据：MCP 的 tool schema 常驻每次请求。模板里挂一个外部 MCP 就等于给每个
+    // 新装好的 profile 加一笔固定开销，所以这条检查必须真的会落闸。
+    label: '在 cordis.patch.yml 里挂一个外部 MCP',
+    expectFail: true,
+    expectId: '3a',
+    mutate: (d) => {
+      const p = path.join(d, 'profiles', 'web', 'cordis.patch.yml');
+      fs.appendFileSync(p, "\n- insert:\n    - id: mcp-demo\n      name: '@deepseek-ai/dsh-mcp-client'\n      config:\n        serverName: demo\n        transport: streamable-http\n");
     },
   },
   {

@@ -1,13 +1,26 @@
 # Your patch layer for this dsh profile, applied after every bundle layer:
 # a top-level YAML array of loader patch entries (id-targeted config
 # overrides, disables, and insert lists; `!!js` expressions allowed).
-
-# Microsoft Learn MCP — official docs access for the model (free, no key).
-- insert:
-    - id: mcp-mslearn
-      name: '@deepseek-ai/dsh-mcp-client'
-      config:
-        serverName: mslearn
-        transport: streamable-http
-        url: https://learn.microsoft.com/api/mcp
-        failOnStartupError: false
+#
+# It ships EMPTY on purpose. A fresh install should start from the bundle
+# defaults and grow this file deliberately — every row here is a decision that
+# has to be re-checked against the next host generation. A template that ships
+# with opinions has to maintain them.
+#
+# ── What does NOT belong here: external MCP servers ──────────────────────────
+# An MCP mount pays its tool schemas in EVERY request, whether or not that turn
+# touches the service. The 207-tool reverse-engineering mount was measured at
+# ~3.1 MB of schema per request before it was dropped; even a 3-tool docs server
+# is a fixed tax on every turn that never asks about docs.
+#
+# The shape we use instead is a skill + CLI: the skill text loads on demand and
+# says when/how to call; the call is an ordinary shell command; nothing is paid
+# until it runs. Microsoft Learn docs are the worked example —
+#   npx -y @microsoft/learn-cli search "azure functions timeout"
+# driven by the `microsoft-docs` skill, which reaches the same official endpoint
+# the MCP server would (https://learn.microsoft.com/api/mcp).
+#
+# Mount MCP only when its tools must participate in an interactive tool-calling
+# loop where shelling out per step would be materially worse. Check `3a` in
+# scripts/check-template.mjs enforces this — a template that mounts one fails.
+[]

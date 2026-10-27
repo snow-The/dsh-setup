@@ -46,6 +46,7 @@ const CHECKS = {
   '2b': 'allowBuilds 不含 hash 形式的键',
   '2c': 'allowBuilds 不含 sha 为空的坏条目',
   '3': 'cordis.patch.yml 无重复声明',
+  '3a': 'cordis.patch.yml 未挂载外部 MCP（外部服务走 skill + CLI）',
   '4': 'cordis.yml 是空列表',
   '5': 'setup.ps1 / setup.sh 都在',
   '5a': '含非 ASCII 的 .ps1 都带 UTF-8 BOM',
@@ -261,6 +262,14 @@ else {
   const dupes = [...byId].filter(([, l]) => l.length > 1);
   if (dupes.length) bad('3', `cordis.patch.yml 里有重复声明（后者的 options 会覆盖前者）: ${dupes.map(([id, l]) => `${id} @${l.map((x) => ':' + x.line).join(',')}`).join('; ')}`);
   else ok('3', `cordis.patch.yml 解析出 ${decls.length} 条声明，无重复`);
+
+  // 3a：外部 MCP 不进模板。判据是同代审计逼出来的：MCP 的 tool schema 是每一次
+  // 请求都要付的常驻开销，跟这一轮用不用得着毫无关系（REA 那个 207 工具挂载实测
+  // 约 3.1MB schema/请求）。外部服务正确的形状是 skill + CLI —— 不调用就不花钱。
+  const mcpDecls = rows.filter((r) => r.name === '@deepseek-ai/dsh-mcp-client');
+  const transports = lines.filter((l) => /^\s*transport:\s*\S/.test(l.replace(/(^|\s)#.*$/, '')));
+  if (mcpDecls.length || transports.length) bad('3a', `cordis.patch.yml 挂载了外部 MCP（${mcpDecls.length} 条 dsh-mcp-client 声明、${transports.length} 条 transport 配置）—— tool schema 会常驻每次请求，改用 skill + CLI`);
+  else ok('3a', 'cordis.patch.yml 没有挂载外部 MCP（外部服务走 skill + CLI）');
 }
 
 // ---------- 4. cordis.yml 必须是空列表 ----------
