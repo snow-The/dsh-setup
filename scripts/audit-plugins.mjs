@@ -27,10 +27,26 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { npmView } from './npm-view.mjs';
+import { satisfiesDsh } from './host-range.mjs';
 
 const argv = process.argv.slice(2);
 const argOf = (n) => { const i = argv.indexOf(`--${n}`); return i >= 0 ? argv[i + 1] : undefined; };
 const AS_JSON = argv.includes('--json');
+// 这一代宿主。给了它，审计才能回答"最新版是不是这一代装不了"，否则只能回答"有没有新版"。
+const RUNTIME = argOf('runtime');
+
+/** 某版本的宿主范围：engines.dsh 优先（门禁也是这个顺序），退回 peerDependencies['@deepseek-ai/dsh']。 */
+function hostRangeOf(name, version) {
+  try {
+    const engines = npmView(`${name}@${version}`, 'engines');
+    if (engines && typeof engines === 'object' && typeof engines.dsh === 'string' && engines.dsh.trim()) return engines.dsh.trim();
+  } catch { /* 形状不认识就当没声明 */ }
+  try {
+    const peers = npmView(`${name}@${version}`, 'peerDependencies');
+    if (peers && typeof peers === 'object' && typeof peers['@deepseek-ai/dsh'] === 'string') return peers['@deepseek-ai/dsh'].trim();
+  } catch { /* 同上 */ }
+  return null;
+}
 
 const rawDir = argOf('profile-dir');
 if (!rawDir) {
@@ -170,8 +186,25 @@ for (const [name, spec] of Object.entries(deps)) {
   } else if (row.kind === 'npm') {
     const latest = npmView(name, 'version');
     row.latest = latest ?? '（查询失败）';
-    row.fresh = latest === spec ? '最新' : `落后（最新 ${latest}）`;
-    if (latest && latest !== spec) row.notes.push(`可升 ${spec} → ${latest}`);
+    if (!latest || latest === spec) {
+      row.fresh = latest ? '最新' : '（查询失败）';
+    } else {
+      // 新版存在 ≠ 本世代能用。宿主门禁看 engines.dsh / peerDependencies['@deepseek-ai/dsh']，
+      // 而它判定时 includePrerelease:true —— rc 号是参与比较的。所以这里必须真的去问
+      // 新一代声明了什么，不能把"落后"一律当成"可升"（2026-10-27 实测：@linxin666/* 的
+      // 0.4.11 要 >=0.2.1-rc.3，装到 rc.2 上会被整包拒载）。
+      const peerRange = hostRangeOf(name, latest);
+      if (!RUNTIME) {
+        row.fresh = `落后（最新 ${latest}；未给 --runtime，没核实新一代是否适配）`;
+        row.notes.push(`可升 ${spec} → ${latest}（先确认它认这一代宿主）`);
+      } else if (peerRange && !satisfiesDsh(peerRange, RUNTIME)) {
+        row.fresh = `本世代最新（${latest} 要宿主 ${peerRange}）`;
+        row.notes.push(`${latest} 的宿主范围 ${peerRange} 不含 ${RUNTIME} —— 所以 ${spec} 就是这一代能用的最新，别升`);
+      } else {
+        row.fresh = `落后（最新 ${latest}）`;
+        row.notes.push(`可升 ${spec} → ${latest}${peerRange ? `（宿主范围 ${peerRange} 认 ${RUNTIME}）` : '（它没声明宿主范围）'}`);
+      }
+    }
   } else if (row.kind === 'github' && spec.includes('#')) {
     const repo = spec.slice('github:'.length).split('#')[0];
     const tags = (sh('git', ['ls-remote', '--tags', '--refs', `https://github.com/${repo}`]) ?? '')

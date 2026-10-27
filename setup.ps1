@@ -75,6 +75,7 @@ if ($LASTEXITCODE -eq 0 -and $remoteHead -ne $localHead) {
 }
 
 # ---------- 2. 备份已有 profile(如有) ----------
+$bak = $null
 if (Test-Path $profileDir) {
     $bak = "$profileDir.bak-$(Get-Date -Format yyyyMMdd-HHmmss)"
     Move-Item $profileDir $bak
@@ -85,6 +86,33 @@ if (Test-Path $profileDir) {
 New-Item -ItemType Directory -Force -Path (Split-Path $profileDir) | Out-Null
 Copy-Item -Recurse $templateDir $profileDir
 Write-Host "已复制模板到: $profileDir" -ForegroundColor Green
+
+# ---------- 3.5 保留既有部署的 patch 层 ----------
+# 升级已有部署时，第 2 步把整个旧 profile 挪进 .bak，第 3 步复制的是模板 —— 模板的 patch
+# 层是空 `[]`，于是新 profile 一个本机配置都没有（模型路由、权限预设、搜索后端、皮肤…）：
+# 起得来，但等于一台没调过的机器。而"直接改部署目录里的 cordis.patch.yml"是操作者最自然
+# 的做法，本项目文档此前也一直这么写。
+# 所以：模板的 patch 层是"干净"的（去掉注释后只剩 []）时，把旧层接过来；模板自带条目说明
+# 这一代模板有意发布配置，那时以模板为准，旧层只留在 .bak 里。
+if ($bak -and (Test-Path (Join-Path $bak "cordis.patch.yml"))) {
+    $newPatchPath = Join-Path $profileDir "cordis.patch.yml"
+    $pristine = $true
+    if (Test-Path $newPatchPath) {
+        # 不能裸用 Get-Content：PS 5.1 按 ANSI 码页解码，无 BOM 的 UTF-8 会乱码。
+        $txt = [System.IO.File]::ReadAllText($newPatchPath, [System.Text.Encoding]::UTF8)
+        $stripped = (($txt -split "`r?`n") -replace '#.*$', '') -join ''
+        $stripped = $stripped -replace '\s', ''
+        if ($stripped -ne '[]') { $pristine = $false }
+    }
+    if ($pristine) {
+        Copy-Item (Join-Path $bak "cordis.patch.yml") $newPatchPath -Force
+        $keptBytes = (Get-Item $newPatchPath).Length
+        Write-Host "已保留旧 patch 层: $keptBytes 字节（来自 .bak）" -ForegroundColor Yellow
+        Write-Host "  · 它是按上一代宿主调的。启动失败就对照 .bak 收窄，或把本机专属配置搬进 profiles/web.local/。" -ForegroundColor Yellow
+    } else {
+        Write-Host "模板自带 patch 条目，按模板走；旧层保留在 .bak" -ForegroundColor DarkGray
+    }
+}
 
 # ---------- 4. 应用站点覆盖 profiles/web.local/ ----------
 if (Test-Path $overlayDir) {

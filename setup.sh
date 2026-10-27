@@ -67,6 +67,7 @@ if [ ! -d "$TEMPLATE_DIR" ]; then
   echo "找不到模板目录: $TEMPLATE_DIR" >&2
   exit 1
 fi
+BAK=""
 if [ -d "$PROFILE_DIR" ]; then
   BAK="$PROFILE_DIR.bak-$(date +%Y%m%d-%H%M%S)"
   mv "$PROFILE_DIR" "$BAK"
@@ -77,6 +78,24 @@ fi
 mkdir -p "$(dirname "$PROFILE_DIR")"
 cp -R "$TEMPLATE_DIR" "$PROFILE_DIR"
 echo "已复制模板到: $PROFILE_DIR"
+
+# ---------- 3.5 保留既有部署的 patch 层 ----------
+# 升级已有部署时，第 2 步把整个旧 profile 挪进 .bak，第 3 步复制的是模板 —— 模板的 patch
+# 层是空 `[]`，于是新 profile 一个本机配置都没有（模型路由、权限预设、搜索后端、皮肤…）：
+# 起得来，但等于一台没调过的机器。而"直接改部署目录里的 cordis.patch.yml"是操作者最自然的
+# 做法，本项目文档此前也一直这么写。
+# 所以：模板的 patch 层是"干净"的（去掉注释后只剩 []）时，把旧层接过来；模板自带条目说明
+# 这一代模板有意发布配置，那时以模板为准，旧层只留在 .bak 里。
+if [ -n "$BAK" ] && [ -f "$BAK/cordis.patch.yml" ]; then
+  PRISTINE="$(sed 's/#.*$//' "$PROFILE_DIR/cordis.patch.yml" 2>/dev/null | tr -d '[:space:]')"
+  if [ "$PRISTINE" = "[]" ]; then
+    cp -f "$BAK/cordis.patch.yml" "$PROFILE_DIR/cordis.patch.yml"
+    echo "已保留旧 patch 层: $(wc -c < "$PROFILE_DIR/cordis.patch.yml") 字节（来自 .bak）"
+    echo "  · 它是按上一代宿主调的。启动失败就对照 .bak 收窄，或把本机专属配置搬进 profiles/web.local/。"
+  else
+    echo "模板自带 patch 条目，按模板走；旧层保留在 $BAK"
+  fi
+fi
 
 # ---------- 4. 应用站点覆盖 profiles/web.local/ ----------
 if [ -d "$OVERLAY_DIR" ]; then

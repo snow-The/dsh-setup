@@ -31,6 +31,7 @@ dsh-setup/
 │   ├── boot-check.mjs           # 真启动一次 profile，验证装配/服务/无报错
 │   ├── plugin-load-check.mjs    # 在指定宿主的真实包上执行插件入口（严格钉住宿主版本）
 │   ├── host-map.mjs             # 把 @deepseek-ai/* 严格钉到指定宿主 + 解析自证
+│   ├── host-range.mjs           # 判定「插件声明的宿主范围认不认这一代」（rc 号参与比较）
 │   ├── e2e-verify.mjs           # 端到端校验
 │   └── fix-ps1-bom.mjs          # 给 .ps1 补 UTF-8 BOM
 └── profiles/
@@ -226,6 +227,17 @@ pnpm boot:check  # 真启动一次已部署的 profile（需要先 .\setup.ps1 �
                  # 想直接在活 home 上跑就 node scripts/boot-check.mjs --live
 ```
 
+**审计插件版本时务必带 `--runtime`**，否则「最新」只等于「有新版」：
+
+```bash
+node scripts/audit-plugins.mjs --profile-dir ~/.dsh/profiles/web --runtime 0.2.1-rc.2
+```
+
+给了它，审计会去问新版的宿主范围（`engines.dsh` 优先、退回 peer），rc 号参与比较 ——
+输出会区分「落后（真能升）」和「本世代最新（新版要更高一代宿主，别升）」。
+不带它，这两种情况分不开，2026-10-27 就因为把 `@linxin666/*` 的 0.4.11 当成可升，
+白白怀疑了一轮（0.4.11 要 `>=0.2.1-rc.3`，在 rc.2 上会被门禁整包拒载）。
+
 ### 为什么需要 `boot:check` —— 一个实测出来的层次差异
 
 2026-10-19 在部署出来的 profile 上做了对照实验，往某个 bundle 的 patch 里注入一条
@@ -416,6 +428,22 @@ cd <dsh-setup目录> && .\setup.ps1    # 或 ./setup.sh
 ```
 
 脚本会先把旧 profile 备份成 `web.bak-<时间戳>`，随时可回退。
+
+**升级时保留什么、覆盖什么**（2026-10-27 起）：
+
+| 文件 | 升级后 |
+|---|---|
+| `cordis.patch.yml`（你的本机配置） | **保留旧层** —— 模板自带的是空 `[]`，脚本会把 `.bak` 里那份接过来并打印字节数 |
+| `package.json` | 用模板的（升级插件版本就是靠这一步；保留旧的等于永远升不上去） |
+| `cordis.yml` / `pnpm-workspace.yaml` | 用模板的（前者必须为空列表，后者由 `plugins.intent.json` 推导） |
+| `profiles/web.local/` | 最后覆盖，优先级最高 |
+
+模板若在某代**自带** patch 条目，就以模板为准、旧层只留在 `.bak` 里 —— 那种情况说明模板有意发布配置。被保留的旧层是按上一代宿主调的，启动失败就对照 `.bak` 收窄，或把本机专属的部分搬进 `profiles/web.local/`（那才是长期该放的地方）。
+
+两条经验记在这里，因为都真踩过：
+
+- `setup.ps1` **必须带 UTF-8 BOM**。Windows PowerShell 5.1 对无 BOM 文件按 ANSI 码页解码，一个中文字符就能让整个脚本解析失败、一行都不执行（报的还是 `UnexpectedToken`，看不出跟编码有关）。`pnpm check` 的 `[5a]` 就是查这个 —— 编辑 `setup.ps1` 之后**立刻**跑一次检查，别等到部署现场。
+- 改完 `setup.ps1` / `setup.sh` 想验证升级行为，别拿真机器试：`DSH_HOME=<临时目录>`（sh）或 `USERPROFILE=<临时目录>`（ps1）就是隔离的，配 `--skip-install --skip-smoke --force` 几秒就能跑完一遍。
 
 ## 故障排查
 
