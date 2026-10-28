@@ -68,8 +68,30 @@ if (Test-Path $preflight) {
     if (Test-Path $profileDir) { $pfArgs += @('--profile-dir', $profileDir) }
     node $preflight @pfArgs
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "宿主与这份 profile 不同代。按上面的「修」升级宿主后重跑本脚本。" -ForegroundColor Red
-        if (-not $Force) { exit 1 }
+        # 光拦下来不算修好: 建议不做的事等于没做。就地升级宿主, 再验一次。
+        Write-Host ""
+        Write-Host "宿主与这份 profile 不同代, 尝试就地升级宿主..." -ForegroundColor Yellow
+        $upgrader = Join-Path $repoDir "scripts\upgrade-host.mjs"
+        if (Test-Path $upgrader) {
+            node $upgrader
+            $upRc = $LASTEXITCODE
+            if ($upRc -eq 0) {
+                node $preflight @pfArgs
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "升级后预检仍不通过, 见上方列表。" -ForegroundColor Red
+                    if (-not $Force) { exit 1 }
+                }
+            } elseif ($upRc -eq 3) {
+                Write-Host "宿主正开着 —— npm 替换全局树会 EBUSY。请先关掉 DSH, 再重跑本脚本。" -ForegroundColor Red
+                if (-not $Force) { exit 1 }
+            } else {
+                Write-Host "宿主升级失败, 见上方 npm 输出。处理完重跑本脚本。" -ForegroundColor Red
+                if (-not $Force) { exit 1 }
+            }
+        } else {
+            Write-Host "未找到 scripts\upgrade-host.mjs, 无法自动升级。" -ForegroundColor Red
+            if (-not $Force) { exit 1 }
+        }
         Write-Host "(-Force: 继续部署; 启动时那些 bundle 仍会被门禁跳过)" -ForegroundColor Yellow
     }
 } else {

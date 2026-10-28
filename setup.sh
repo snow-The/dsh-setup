@@ -53,8 +53,33 @@ if [ -f "$REPO_DIR/scripts/preflight-host.mjs" ]; then
     node "$REPO_DIR/scripts/preflight-host.mjs"
   fi
   if [ $? -ne 0 ]; then
-    echo "宿主与这份 profile 不同代。按上面的「修」升级宿主后重跑。" >&2
-    if [ "$FORCE" != "1" ]; then exit 1; fi
+    # 光拦下来不算修好: 建议不做的事等于没做。就地升级宿主, 再验一次。
+    echo ""
+    echo "宿主与这份 profile 不同代, 尝试就地升级宿主..."
+    if [ -f "$REPO_DIR/scripts/upgrade-host.mjs" ]; then
+      node "$REPO_DIR/scripts/upgrade-host.mjs"
+      UP_RC=$?
+      if [ "$UP_RC" -eq 0 ]; then
+        if [ -d "$PROFILE_DIR" ]; then
+          node "$REPO_DIR/scripts/preflight-host.mjs" --profile-dir "$PROFILE_DIR"
+        else
+          node "$REPO_DIR/scripts/preflight-host.mjs"
+        fi
+        if [ $? -ne 0 ]; then
+          echo "升级后预检仍不通过, 见上方列表。" >&2
+          if [ "$FORCE" != "1" ]; then exit 1; fi
+        fi
+      elif [ "$UP_RC" -eq 3 ]; then
+        echo "宿主正开着 —— npm 替换全局树会 EBUSY。请先关掉 DSH, 再重跑本脚本。" >&2
+        if [ "$FORCE" != "1" ]; then exit 1; fi
+      else
+        echo "宿主升级失败, 见上方 npm 输出。处理完重跑本脚本。" >&2
+        if [ "$FORCE" != "1" ]; then exit 1; fi
+      fi
+    else
+      echo "未找到 scripts/upgrade-host.mjs, 无法自动升级。" >&2
+      if [ "$FORCE" != "1" ]; then exit 1; fi
+    fi
     echo "(--force: 继续部署; 启动时那些 bundle 仍会被门禁跳过)" >&2
   fi
 else

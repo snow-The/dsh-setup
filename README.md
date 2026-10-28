@@ -34,6 +34,7 @@ dsh-setup/
 │   ├── host-range.mjs           # 判定「插件声明的宿主范围认不认这一代」（rc 号参与比较）
 │   ├── preflight-host.mjs       # 部署前问一句：这台机器的宿主认不认这份 profile（旧宿主会静默跳包）
 │   ├── carry-over-deps.mjs      # 升级时把操作者自己加的依赖接过来（模板不认识 forge9 这类本地方案）
+│   ├── upgrade-host.mjs         # 就地升级全局 dsh 到这份 profile 要的世代（含原生依赖放行、被占用检测）
 │   ├── e2e-verify.mjs           # 端到端校验
 │   └── fix-ps1-bom.mjs          # 给 .ps1 补 UTF-8 BOM
 └── profiles/
