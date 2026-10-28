@@ -40,6 +40,27 @@ else
   echo "未找到 scripts/check-template.mjs,跳过模板自检。"
 fi
 
+# ---------- 1.5 预检: 宿主世代认不认这份 profile ----------
+# 2026-10-28 实伤: profile 已装到要 >=0.2.1-rc.2 的一代, 全局 dsh 还停在 0.2.0-rc.2。
+# 宿主不报错, 只在启动时静默跳过整包(skipping profile bundle ...), GUI 少一半东西,
+# 而部署脚本全程绿灯。所以部署前先问一句「这一代认不认」。
+echo ""
+echo "==> 预检: 宿主世代"
+if [ -f "$REPO_DIR/scripts/preflight-host.mjs" ]; then
+  if [ -d "$PROFILE_DIR" ]; then
+    node "$REPO_DIR/scripts/preflight-host.mjs" --profile-dir "$PROFILE_DIR"
+  else
+    node "$REPO_DIR/scripts/preflight-host.mjs"
+  fi
+  if [ $? -ne 0 ]; then
+    echo "宿主与这份 profile 不同代。按上面的「修」升级宿主后重跑。" >&2
+    if [ "$FORCE" != "1" ]; then exit 1; fi
+    echo "(--force: 继续部署; 启动时那些 bundle 仍会被门禁跳过)" >&2
+  fi
+else
+  echo "未找到 scripts/preflight-host.mjs,跳过宿主世代预检。"
+fi
+
 # ---------- 2. 预检: 仓库是否最新 ----------
 echo ""
 echo "==> 预检: 仓库同步状态"
@@ -104,6 +125,35 @@ if [ -d "$OVERLAY_DIR" ]; then
   echo "站点覆盖完成。"
 else
   echo "未发现 profiles/web.local/,跳过站点覆盖。"
+fi
+
+# ---------- 4.5 保留操作者自己加的依赖(升级不丢插件) ----------
+# 部署第 3 步复制的是模板; 模板不认识操作者自己加的依赖(典型: 一个还在开发的本地插件
+# link: 到自己的 repo)。复制完它的 bundle 条目就解析不到, 启动时只剩一行 skipping。
+# 实现在 scripts/carry-over-deps.mjs, 与 setup.ps1 共用。
+if [ -n "$BAK" ] && [ -f "$BAK/package.json" ] && [ -f "$PROFILE_DIR/package.json" ] && [ -f "$REPO_DIR/scripts/carry-over-deps.mjs" ]; then
+  CARRIED=0
+  while IFS= read -r line; do
+    case "$line" in
+      "carried: none") ;;
+      "carried: "*) echo "  已保留(模板里没有): ${line#carried: }"; CARRIED=$((CARRIED+1)) ;;
+      *) echo "  $line" ;;
+    esac
+  done < <(node "$REPO_DIR/scripts/carry-over-deps.mjs" "$BAK" "$PROFILE_DIR" 2>&1)
+  if [ "$CARRIED" -eq 0 ]; then
+    echo "操作者没有额外依赖需要保留。"
+  else
+    echo "  · 装不上会在冒烟测试里暴露。"
+  fi
+fi
+
+# ---------- 4.6 确保 .npmrc 在 ----------
+# 只在 pnpm-workspace.yaml 里写 autoInstallPeers:false 不够 —— 那条要 pnpm 以 workspace
+# 模式读到该文件才生效; 用户级配置或从别的 cwd 发起安装都会绕过它。项目级 .npmrc 不需要
+# workspace 模式, 且优先级高于用户级配置。
+if [ ! -f "$PROFILE_DIR/.npmrc" ]; then
+  printf 'auto-install-peers=false\nstrict-peer-dependencies=false\n' > "$PROFILE_DIR/.npmrc"
+  echo "已补 .npmrc(关掉 peer 自动安装)。"
 fi
 
 # ---------- 6. 安装依赖 ----------

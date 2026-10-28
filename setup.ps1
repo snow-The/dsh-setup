@@ -54,6 +54,28 @@ if (Test-Path $checker) {
     Write-Host "未找到 scripts\check-template.mjs,跳过模板自检。" -ForegroundColor DarkGray
 }
 
+# ---------- 1.5 预检: 宿主世代认不认这份 profile ----------
+# 2026-10-28 实伤: profile 已经装到要 >=0.2.1-rc.2 的一代, 而全局 dsh 还停在 0.2.0-rc.2。
+# 宿主不报错, 只在启动时**静默跳过整包**:
+#   dsh: skipping profile bundle "@linxin666/dsh-web-all": peerDependencies {...}
+# 表现是「GUI 坏了一半」(Web UI 全家桶、会话归档全没), 而部署脚本全程绿灯。
+# 所以部署前先问一句「这一代认不认」, 不认就停下并给出确切命令。
+Write-Host ""
+Write-Host "==> 预检: 宿主世代" -ForegroundColor Cyan
+$preflight = Join-Path $repoDir "scripts\preflight-host.mjs"
+if (Test-Path $preflight) {
+    $pfArgs = @()
+    if (Test-Path $profileDir) { $pfArgs += @('--profile-dir', $profileDir) }
+    node $preflight @pfArgs
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "宿主与这份 profile 不同代。按上面的「修」升级宿主后重跑本脚本。" -ForegroundColor Red
+        if (-not $Force) { exit 1 }
+        Write-Host "(-Force: 继续部署; 启动时那些 bundle 仍会被门禁跳过)" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "未找到 scripts\preflight-host.mjs,跳过宿主世代预检。" -ForegroundColor DarkGray
+}
+
 # ---------- 2. 预检: 仓库是否最新 ----------
 Write-Host ""
 Write-Host "==> 预检: 仓库同步状态" -ForegroundColor Cyan
@@ -121,6 +143,39 @@ if (Test-Path $overlayDir) {
     Write-Host "站点覆盖完成。" -ForegroundColor Green
 } else {
     Write-Host "未发现 profiles/web.local/,跳过站点覆盖。" -ForegroundColor DarkGray
+}
+
+# ---------- 4.5 保留操作者自己加的依赖(升级不丢插件) ----------
+# 实现在 scripts\carry-over-deps.mjs, 与 setup.sh 共用一份 —— PowerShell 里手写 JSON
+# 合并太脆(PSObject 的键名含斜杠、类型丢失), 不值得。
+if ($bak -and (Test-Path (Join-Path $bak "package.json")) -and (Test-Path (Join-Path $profileDir "package.json"))) {
+    $carry = Join-Path $repoDir "scripts\carry-over-deps.mjs"
+    if (Test-Path $carry) {
+        $carryOut = node $carry $bak $profileDir 2>&1
+        $kept = 0
+        foreach ($line in @($carryOut)) {
+            $text = "$line"
+            if ($text -match '^carried: (.+)$') {
+                Write-Host "  已保留(模板里没有): $($matches[1])" -ForegroundColor Yellow
+                $kept++
+            } elseif ($text -notmatch '^carried: none$') {
+                Write-Host "  $text" -ForegroundColor DarkYellow
+            }
+        }
+        if ($kept -eq 0) { Write-Host "操作者没有额外依赖需要保留。" -ForegroundColor DarkGray }
+        else { Write-Host "  · 装不上会在第 6 步冒烟测试里暴露。" -ForegroundColor Yellow }
+    }
+}
+
+# ---------- 4.6 确保 .npmrc 在 ----------
+# 只在 pnpm-workspace.yaml 里写 autoInstallPeers:false 不够 —— 那条要 pnpm 以
+# workspace 模式读到该文件才生效; 用户级配置或从别的 cwd 发起安装都会绕过它。
+# 项目级 .npmrc 不需要 workspace 模式, 且优先级高于用户级配置。
+$npmrcPath = Join-Path $profileDir ".npmrc"
+if (-not (Test-Path $npmrcPath)) {
+    $npmrcBody = "auto-install-peers=false`nstrict-peer-dependencies=false`n"
+    [System.IO.File]::WriteAllText($npmrcPath, $npmrcBody, (New-Object System.Text.UTF8Encoding($false)))
+    Write-Host "已补 .npmrc(关掉 peer 自动安装)。" -ForegroundColor Yellow
 }
 
 # ---------- 5. 安装依赖 ----------
