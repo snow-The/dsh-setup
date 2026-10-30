@@ -217,6 +217,61 @@ npx -y @microsoft/learn-cli code-search "cosmos db change feed"
 
 **不提交 `pnpm-lock.yaml`**：各机器平台/Node 版本不同，首次 `pnpm install` 现场解析。因此每次部署都应重跑 `pnpm install` 以拾取新版本。
 
+### 三个 `dsh` 入口必须同版（`preflight-host` 第 4 条判据）
+
+同一台机器上可以同时存在三个「`dsh`」，而它们**不一定同版**。2026-10-30 实测：
+
+```text
+dsh --version                              → 0.2.1-rc.5   （PATH；npx 缓存里的那一份）
+~/AppData/Roaming/npm/dsh.cmd --version    → 0.2.1-rc.2   （全局安装，旧的）
+正在服务 :3080 的进程                       → 0.2.1-rc.5   （npx 缓存）
+```
+
+危险的不是「多装了一个」，而是**重启脚本拉的是第三个**：那一刻用 shim 重启，就等于把宿主
+换回 rc.2；而 profile 里 `@linxin666/*` 要求 `>=0.2.1-rc.3` —— 于是又会静默跳过 bundle，
+症状和笔记那台机器一模一样，只是这次发生在桌面上。
+
+`preflight-host` 现在会列出三个入口并比对，任一不同版即 `exit 1`：
+
+```bash
+node scripts/preflight-host.mjs              # 默认看 :3080
+node scripts/preflight-host.mjs --port 3081
+```
+
+修法二选一，都不许「知道就好」：
+1. 把三者对齐到同一版（通常是 `npm i -g @deepseek-ai/dsh@<正在跑的版本>`）；
+2. 让重启照**正在跑的那个入口**拉起 —— `restart-host.mjs` 已经改成这样做：先从进程命令行
+   取它自己的 `lib/bin.js`，照原样重启，取不到才退回 shim，并且**在日志里写明用了哪一个**。
+
+> 判据前三条（宿主够新、插件范围接受、rc 参与比较）在当时**全是绿灯**。
+> 它们只回答「`dsh` 是几版」，没有回答「是**哪一个** `dsh`」。
+
+### 挂载一个 bundle 插件：两处，不是三处
+
+`dsh` 的 profile 有两种挂法，**只用第一种**：
+
+| 做法 | 位置 | 结论 |
+|---|---|---|
+| 依赖 + bundle 列表 | `package.json` 的 `dependencies` ＋ `dsh.profile.bundles` | ✅ 正确；插件自带的 `cordis.patch.yml` 会自己声明 id |
+| 再在 profile 的 `cordis.patch.yml` 写一行 `- id: <id>` | `profiles/web/cordis.patch.yml` | ❌ **不要** |
+
+第二种不会报错，只会**静默重复声明**：加载器对同一个 id 只保留一个 entry，
+后到的覆盖先到的（`doctor_patch` 报 `duplicate-declaration-cross-file`）。
+在 `2026-10-30` 的实际注入中，`@snow-the/*` 全部只靠 bundle 列表挂载，
+profile 的 patch 层里一行都没有 —— 那不是遗漏，是规则。
+
+```bash
+pnpm check          # 模板一致性；挂载规则由它 + doctor_patch 一起把关
+pnpm load:check     # 在正确的宿主副本上真的执行一遍插件模块
+```
+
+插件本身的 id 冲突用 `doctor_patch`（`dsh-plugin-doctor`）看：它报
+`duplicate-declaration-cross-file` 就是这里说的那种静默覆盖。
+
+> 另一个容易忘的事实：`file:` 依赖在 profile 里是**硬链接**，不是复制。
+> 所以「重建插件 dist」= 直接写进生产 profile；`sync-profile-dists --check`
+> 拿它自己是比对基准，因此永远显示「一致」。要重置插件，就重装依赖，不要只 rebuild。
+
 ## 模板一致性检查
 
 任何改动后跑一次：
