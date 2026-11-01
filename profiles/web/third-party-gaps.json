@@ -20,10 +20,10 @@
     {
       "pkg": "dshmarket",
       "spec": "1.71.1",
-      "gap": "没有 engines.dsh，也没有 peerDependencies.dsh",
-      "effect": "宿主门禁无从判定 —— 装到任何一代宿主都会被接受",
-      "compensate": "精确钉版本；1.71.1 在 0.2.1-rc.3 上跑过真启动与 17/17 模块加载",
-      "recorded": "2026-10-27"
+      "gap": "①没有 engines.dsh，也没有 peerDependencies.dsh（peers 只有 cordis / dsh-settings / schemastery，宿主都满足），所以宿主门禁无从判定；②客户端包 client/client.js 里硬 require(\"@deepseek-ai/dsh-client-ui-primitives\")，而 0.2.1-rc.5 已把该包删除并并入 dsh-client-ui-renderer —— 1.71.1 与 1.73.7 **同样如此**。",
+      "effect": "①装到任何一代宿主都会被接受，没有版本闸；②「要不要升到 1.73.7」这个问题现在的答案是：**升了既不更好也不更坏**——硬 require 与缺失的 client.inject 目标（dsh-client-runtime / dsh-invariants）在 1.71.1 上就已经存在，这不是升级引入的，是代际缺口。服务端不受影响，退化只在市场上那块的客户端。",
+      "compensate": "精确钉 1.71.1 不动；要升就先接受客户端那块退化。判据（2026-11-02 实测）：npm pack 两个版本 → 扫 client/client.js 的 require → 拿宿主 302 个包对照；两版 peers 逐字相同。1.71.1 在 0.2.1-rc.3 上跑过真启动与 17/17 模块加载。",
+      "recorded": "2026-11-02"
     },
     {
       "pkg": "@mars-sea/dsh-commandcode-provider",
