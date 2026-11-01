@@ -27,11 +27,11 @@
     },
     {
       "pkg": "@mars-sea/dsh-commandcode-provider",
-      "spec": "0.15.4",
-      "gap": "peerDependencies 仍硬要 @deepseek-ai/dsh-client-ui-slots 与 @deepseek-ai/dsh-client-ui-primitives —— 这两个包在 0.2.1 已删除（实现并入 dsh-client-ui-renderer）",
-      "effect": "peer 不可满足，靠 profile 的 autoInstallPeers:false 才没在安装期炸。engines.dsh 这一半已在 0.15.4 修好：0.14.3 写的是 `0.2.0-rc.2 || 0.2.1-rc.2`（升到 rc.3 时被门禁整包拒载、连 patch 条目都消失），0.15.4 改成 `>=0.2.1-rc.2 <0.2.2-0`，rc.3 可通过",
-      "compensate": "精确钉版本；同代审计逐条检查它 import 的包在宿主里存在；0.15.4 在 0.2.1-rc.3 上跑过装配（stderr 为空、348 条 loader 条目）与真启动 PASS",
-      "recorded": "2026-10-27"
+      "spec": "0.16.0",
+      "gap": "peerDependencies 仍硬要 @deepseek-ai/dsh-client-ui-slots 与 @deepseek-ai/dsh-client-ui-primitives —— 这两个包在 0.2.1 已删除（实现并入 dsh-client-ui-renderer）。0.16.0 里**仍然存在**，缺口没有变。",
+      "effect": "peer 不可满足，靠 profile 的 autoInstallPeers:false 才没在安装期炸。engines.dsh 在 0.16.0 放宽成 `>=0.2.1-rc.2 <0.2.2-0 || >=0.2.2-alpha.2 <0.2.3-0`：0.2.1-rc.5 落在区间内，但**上界仍在**——宿主升到 0.2.2 正式版时它会再次被整包拒载（0.14.3 那次就是这样，连 patch 条目都消失）。",
+      "compensate": "精确钉版本；同代审计逐条检查它 import 的包在宿主里存在。0.15.4 在 0.2.1-rc.3 上跑过装配与真启动 PASS；**0.16.0 在 0.2.1-rc.5 上跑过 guide_boot（20 秒存活、stderr 空、DOM 无插件加载错误）**，且 audit-generation 的 import 列全绿。",
+      "recorded": "2026-11-02"
     },
     {
       "pkg": "dsh-undo-savepoint",
