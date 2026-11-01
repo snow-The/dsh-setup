@@ -24,6 +24,7 @@
  *   node scripts/verify-all.mjs --json
  */
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -47,6 +48,42 @@ const STATIC = [
 
 const DSH_HOME = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
 const PROFILE_DIR = path.join(DSH_HOME, 'profiles', PROFILE);
+
+// ---- 输入预检：把「参数传错」和「插件坏了」分开 ----
+// 2026-11-02 实伤：同一轮里出现 3 条红（宿主同代 / 真启动 / 入口初始化），全都长得像插件缺陷，
+// 实际是输入错了 —— ① --host 给了 npm 根（那里只有 @deepseek-ai/dsh，插件解析层其实在
+// <dsh>/node_modules）；② --dsh 给了 lib/bin.js（Windows 上它不是可执行文件，要用 .cmd 垫片），
+// 于是「真启动一次」2 秒就红、还显示"真错误 0 条"。
+// 门禁自己算不出这三种红是它自己的，所以输入必须先自证：不然工具的问题会被记到插件头上。
+const quoteArg = (s) => (/[\s"]/.test(String(s)) ? `"${String(s).replace(/"/g, '\\"')}"` : String(s));
+const refuse = (msg) => {
+  console.error(`\n预检失败（这不是插件的问题，是这次给的门禁输入不对）:\n  ${msg}`);
+  process.exit(2);
+};
+
+if (HOST) {
+  const pkgAt = (dir, name) => [path.join(dir, name), path.join(dir, '@deepseek-ai', name)]
+    .map((p) => path.join(p, 'package.json'))
+    .find((p) => fs.existsSync(p));
+  if (!pkgAt(HOST, 'dsh-tools')) {
+    // 顺手看看上一层是不是才对，给出可以直接抄的路径
+    const alt = path.join(HOST, '@deepseek-ai', 'dsh', 'node_modules');
+    refuse(`--host 里没有 @deepseek-ai/dsh-tools。\n  --host 要给【宿主包目录】，通常是 <dsh 安装目录>/node_modules。\n` +
+      `  收到: ${HOST}\n` + (fs.existsSync(path.join(alt, '@deepseek-ai')) ? `  这台机器上像是: ${alt}` : '  例: .../npm/node_modules/@deepseek-ai/dsh/node_modules'));
+  }
+}
+
+if (DSH) {
+  const probe = process.platform === 'win32'
+    ? spawnSync(`${quoteArg(DSH)} --version`, { encoding: 'utf8', shell: true, timeout: 120000 })
+    : spawnSync(DSH, ['--version'], { encoding: 'utf8', timeout: 120000 });
+  const out = `${probe.stdout ?? ''}${probe.stderr ?? ''}`;
+  if (probe.status !== 0 || !/\d+\.\d+\.\d+/.test(out)) {
+    refuse(`--dsh 起不来（--version 退出码 ${probe.status ?? 'spawn 失败'}）。\n` +
+      `  Windows 要给 .cmd 垫片或真正的可执行文件，不是 lib/bin.js（它不是可执行文件）。\n  收到: ${DSH}\n` +
+      (out.trim() ? `  它的输出: ${out.trim().split('\n')[0].slice(0, 160)}` : '  它没有任何输出'));
+  }
+}
 
 const GATED = [
   {
