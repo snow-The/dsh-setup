@@ -20,16 +20,20 @@ autoInstallPeers: false
 allowBuilds:
   # --- github:/file: deps: each builds its own dist/ in a prepare script ---
   "@snow-the/dsh-acp-memory": true
+  "@snow-the/dsh-alexlib": true
   "@snow-the/dsh-browser": true
   "@snow-the/dsh-busyloop": true
   "@snow-the/dsh-eigenflux": true
   "@snow-the/dsh-gitkit": true
   "@snow-the/dsh-lib-analyzer": true
   "@snow-the/dsh-notemap": true
+  "@snow-the/dsh-orchestrator": true
   "@snow-the/dsh-plugin-doctor": true
   "@snow-the/dsh-plugin-guide": true
+  "@snow-the/dsh-plugin-levels": true
   "@snow-the/dsh-research-lab": true
   "@snow-the/dsh-search": true
+  "@snow-the/dsh-session-bus": true
   "@snow-the/dsh-session-handoff": true
   "@snow-the/dsh-session-repair": true
   "@snow-the/dsh-skill-pack": true
