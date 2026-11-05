@@ -22,6 +22,9 @@ dsh-setup/
 │   ├── derive-profile.selftest.mjs   # 推导脚本的变异自检
 │   ├── check-template.mjs       # 模板一致性检查（setup 的装配验证也会调）
 │   ├── check-template.selftest.mjs   # 检查器的变异自检
+│   ├── host-doctor.mjs          # 宿主体检：包完整性 + 解析层 + profile 包能否 realpath（可在任何机器上只读运行）
+│   ├── commit-integrity.mjs     # 按 git HEAD 的树验相对 import：本机能跑 ≠ 别人装了能跑
+│   ├── patch-guard.mjs          # cordis.patch.yml 的「1 字节」护栏：健康时留副本，坏了 --restore
 │   ├── verify-all.mjs           # 一条命令跑完六层验证（win/linux 通用，不依赖 CI）
 │   ├── audit-all.mjs            # 一次跑完四条审计轴（依赖/同代/运行时/日志），任一失败即退出 1
 │   ├── audit-generation.mjs     # 插件与宿主是否同一代（import / client 注入 / 解析目标 / 声明）
