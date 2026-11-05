@@ -36,10 +36,10 @@
     {
       "pkg": "dsh-undo-savepoint",
       "spec": "0.5.0",
-      "gap": "自愈写出有破坏性：lib/health.mjs 的 cleanDanglingInserts 在判定到「悬空 insert 键」时把整个 patch 层重写成 keep.join(换行) 再加一个换行 —— keep 为空时写出的就是 1 个字节。这一条既能进安全模式，也能被 install/patchReload 触发",
-      "effect": "不是门禁问题而是数据损坏：一次自愈就能让整个 profile 起不来，而报错指向 YAML 形状（overlay ... must be a top-level YAML array），完全不提这个插件，排错会一路走偏。2026-10-27 实测两回：17:08 与 17:39:23",
-      "compensate": "profile 的 cordis.patch.yml 不使用 insert: 包裹形式（authorization 改成顶层 id+name 声明），没有可误判的对象；原件仍在 undo-snapshots/auto/safe-mode-backup-*.yml，可整份还回",
-      "recorded": "2026-10-27"
+      "gap": "**更正(2026-11-05)**：0.5.0 的 `cleanDanglingInserts` 已经有两道闸（`hasPatchEntries` 拦空写 + 写前备份），**写不出空文件了**——原记录说的 1 字节不是它。真正的写者是同版本 `lib/core.mjs` 的 `ensureMount()`：bundle 模式下若 patch 里存在 `# dsh-undo-savepoint mount` 标记，它把该块剪掉后 `writeFile` 直接写回，**没有空文件保护**。而它自己的安全模式写出的正是「SAFE MODE 头部 + 挂载块」这一形状，于是下一次启动剪完只剩一个换行。",
+      "effect": "profile 的 `cordis.patch.yml` 变成 1 个字节 → 下一次启动报 `must be a top-level YAML array`，整台机器起不来；而当时运行的宿主看起来完全正常，所以没人发现。2026-11-01（笔记本）与 2026-11-05（本机，重启时刻）各发生一次。",
+      "compensate": "① 外部护栏 `~/.dsh/_p0/patch-guard.mjs`：健康时自动留一份已知好副本，坏了 `--restore` 一条命令恢复（已双向验过：1 字节现场会红并列出候选，恢复后 exit 0）。② 想根治就把 `autoSafeModeAfterFails` 设为 0（`0 = 关闭`，见 lib/index.js 的 cfg），避免先进入安全模式——但那要先写进 profile 的 patch 配置，属人工决定。③ 上游无修复版（0.5.0 即 latest）。",
+      "recorded": "2026-11-05"
     }
   ]
 }
