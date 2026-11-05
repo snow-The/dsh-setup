@@ -29,9 +29,9 @@
       "pkg": "@mars-sea/dsh-commandcode-provider",
       "spec": "0.16.0",
       "gap": "peerDependencies 仍硬要 @deepseek-ai/dsh-client-ui-slots 与 @deepseek-ai/dsh-client-ui-primitives —— 这两个包在 0.2.1 已删除（实现并入 dsh-client-ui-renderer）。0.16.0 里**仍然存在**，缺口没有变。",
-      "effect": "peer 不可满足，靠 profile 的 autoInstallPeers:false 才没在安装期炸。engines.dsh 在 0.16.0 放宽成 `>=0.2.1-rc.2 <0.2.2-0 || >=0.2.2-alpha.2 <0.2.3-0`：0.2.1-rc.5 落在区间内，但**上界仍在**——宿主升到 0.2.2 正式版时它会再次被整包拒载（0.14.3 那次就是这样，连 patch 条目都消失）。",
-      "compensate": "精确钉版本；同代审计逐条检查它 import 的包在宿主里存在。0.15.4 在 0.2.1-rc.3 上跑过装配与真启动 PASS；**0.16.0 在 0.2.1-rc.5 上跑过 guide_boot（20 秒存活、stderr 空、DOM 无插件加载错误）**，且 audit-generation 的 import 列全绿。",
-      "recorded": "2026-11-02"
+      "effect": "peer 不可满足时靠 profile 的 autoInstallPeers:false 才没在安装期炸。engines.dsh 在 0.16.0 是 `>=0.2.1-rc.2 <0.2.2-0 || >=0.2.2-alpha.2 <0.2.3-0`。**更正(2026-11-05)**：原记录说「0.2.2 正式版会被整包拒载」——**错的**。用 semver 实判：0.2.1-rc.5 / 0.2.2-alpha.2 / 0.2.2-alpha.3 / **0.2.2-rc.1** / **0.2.2** 全部接受，只有 0.2.3-alpha.1 起被拒。第二个区间 `>=0.2.2-alpha.2 <0.2.3-0` 已经把整个 0.2.2 系列（含 rc 与正式版）包进去了。",
+      "compensate": "精确钉版本；同代审计逐条检查它 import 的包在宿主里存在。0.15.4 在 0.2.1-rc.3 上跑过装配与真启动 PASS；**0.16.0 在 0.2.1-rc.5 上跑过 guide_boot（20 秒存活、stderr 空、DOM 无插件加载错误）**，且 audit-generation 的 import 列全绿。 0.2.2-rc.1 这条上界不是障碍（semver 实测），所以升级判断不该拿它当理由；真正的风险在插件 API 变更（tools.resolve/executable、PTC 拆分、agent.model vs 改 agent/request 的路由），要按代码逐条查。",
+      "recorded": "2026-11-05"
     },
     {
       "pkg": "dsh-undo-savepoint",
