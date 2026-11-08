@@ -72,11 +72,12 @@ try {
 // 以 $comment 开头的键是给人看的文档，不参与推导
 const forReal = Object.keys(intent).filter((k) => !k.startsWith('$'));
 const KNOWN = new Set(['profileName', 'packageManager', 'patchReload', 'runtime', 'hostBundles',
-  'npm', 'github', 'derivedOverridesFrom', 'buildDeps', 'bundleOrder']);
+  'npm', 'github', 'local', 'derivedOverridesFrom', 'buildDeps', 'bundleOrder']);
 for (const k of forReal) if (!KNOWN.has(k)) fail(`意图里有未知字段 "${k}"（拼错了？）`);
 
 const npmDeps = intent.npm ?? {};
 const ghDeps = intent.github ?? {};
+const localDeps = intent.local ?? {};
 const hostBundles = intent.hostBundles ?? [];
 const buildDeps = intent.buildDeps ?? [];
 const bundleOrder = intent.bundleOrder ?? [];
@@ -88,11 +89,22 @@ for (const [name, v] of Object.entries(npmDeps)) {
 for (const [name, v] of Object.entries(ghDeps)) {
   if (!/^[\w.-]+\/[\w.-]+(#[\w./-]+)?$/.test(String(v))) fail(`github 依赖 ${name} 的值 "${v}" 不是 owner/repo[#ref] 形式`);
 }
+for (const [name, rel] of Object.entries(localDeps)) {
+  if (typeof rel !== 'string' || rel.length === 0) { fail(`local 依赖 ${name} 的值不是路徑`); continue; }
+  const dir = path.resolve(ROOT, rel);
+  const pkgFile = path.join(dir, 'package.json');
+  if (!fs.existsSync(pkgFile)) { fail(`local 依赖 ${name} 指向 ${rel}，但那里没有 package.json`); continue; }
+  let pkg;
+  try { pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8')); } catch (e) { fail(`local 依赖 ${name} 的 package.json 无法解析: ${e.message}`); continue; }
+  // 名字對不上就等於把錯的目錄掛上去 —— 這種錯在宿主啟動時只會表現成「插件沒生效」
+  if (pkg.name !== name) fail(`local 依赖 ${name} 指向的目錄其 package.json name 是 "${pkg.name}"`);
+}
 for (const b of hostBundles) if (!/^@deepseek-ai\//.test(b)) fail(`hostBundles 里的 ${b} 不是 @deepseek-ai/* 包名`);
 
 const deps = {};
 for (const [k, v] of Object.entries(npmDeps)) deps[k] = v;
 for (const [k, v] of Object.entries(ghDeps)) deps[k] = `github:${v}`;
+for (const [k, v] of Object.entries(localDeps)) deps[k] = `file:${path.resolve(ROOT, v).replaceAll('\\', '/')}`;
 
 for (const b of hostBundles) if (Object.hasOwn(deps, b)) {
   fail(`${b} 同时出现在 hostBundles 和 dependencies 里 —— 同一插件两个副本，宿主升级后 profile 那份会滞留旧版本`);
