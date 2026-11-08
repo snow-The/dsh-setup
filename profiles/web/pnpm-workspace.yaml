@@ -22,6 +22,11 @@ allowBuilds:
   "@snow-the/dsh-agent-reach": true
   "@snow-the/dsh-alexlib": true
   "@snow-the/dsh-browser": true
+  "@snow-the/dsh-bundle-core": true
+  "@snow-the/dsh-bundle-dev": true
+  "@snow-the/dsh-bundle-ingest": true
+  "@snow-the/dsh-bundle-integrations": true
+  "@snow-the/dsh-bundle-research": true
   "@snow-the/dsh-busyloop": true
   "@snow-the/dsh-eigenflux": true
   "@snow-the/dsh-gitkit": true

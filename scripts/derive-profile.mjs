@@ -73,7 +73,7 @@ try {
 // 以 $comment 开头的键是给人看的文档，不参与推导
 const forReal = Object.keys(intent).filter((k) => !k.startsWith('$'));
 const KNOWN = new Set(['profileName', 'packageManager', 'patchReload', 'runtime', 'hostBundles',
-  'npm', 'github', 'local', 'derivedOverridesFrom', 'buildDeps', 'bundleOrder']);
+  'npm', 'github', 'local', 'derivedOverridesFrom', 'buildDeps', 'bundleOrder', 'aggregates']);
 for (const k of forReal) if (!KNOWN.has(k)) fail(`意图里有未知字段 "${k}"（拼错了？）`);
 
 const npmDeps = intent.npm ?? {};
@@ -82,6 +82,7 @@ const localDeps = intent.local ?? {};
 const hostBundles = intent.hostBundles ?? [];
 const buildDeps = intent.buildDeps ?? [];
 const bundleOrder = intent.bundleOrder ?? [];
+const aggregates = intent.aggregates ?? {};
 
 /**
  * local 依赖的目录解析。~ 展开成家目录是必须的：
@@ -130,12 +131,39 @@ if (new Set(bundleOrder).size !== bundleOrder.length) {
 }
 
 const hostSet = new Set(hostBundles);
+
+// ---------- 聚合包 ----------
+// 聚合包（bundle）只插入成员的 row，不搬任何代码；成员仍是独立套件、单独安装。
+// 线上 profile 就是这形状：bundles 里列 5 个聚合包，成员只作为依赖装着。
+// 所以「装了却从不挂载」的判定必须认得传递挂载，否则会逼着人把成员也列一遍 ——
+// 而同一个 id 被两层宣告时，后写入的那层静默胜出（实测自官方 dsh-base：
+// 第一次我把 dsh-memory 同时写进聚合包和 profile.bundles，是错的）。
+const memberOf = new Map(); // member -> [aggregate]
+for (const [bundle, members] of Object.entries(aggregates)) {
+  if (!Array.isArray(members) || members.length === 0) { fail(`aggregates 里的 ${bundle} 没有成员列表`); continue; }
+  if (!Object.hasOwn(deps, bundle)) fail(`聚合包 ${bundle} 没有依赖来源（npm/github/local 都不在）`);
+  if (!bundleOrder.includes(bundle)) fail(`聚合包 ${bundle} 不在 bundleOrder 里 —— 装了却从不挂载`);
+  for (const m of members) {
+    if (typeof m !== 'string' || !m) { fail(`聚合包 ${bundle} 的成员里有非字符串`); continue; }
+    // 成员也必须是依赖：聚合包只写 row，加载时仍按包名从 profile 的 node_modules 解析，
+    // 依赖里没有它就等于「声明了却不装」——宿主启动时才炸，而且报的是找不到包。
+    if (!Object.hasOwn(deps, m) && !hostSet.has(m)) fail(`聚合包 ${bundle} 的成员 ${m} 没有依赖来源（成员也必须是依赖）`);
+    if (bundleOrder.includes(m)) fail(`${m} 同时被聚合包 ${bundle} 宣告、又直接列在 bundleOrder 里 —— 同一 id 两层宣告，后者静默胜出`);
+    if (memberOf.has(m)) fail(`${m} 同时属于多个聚合包: ${memberOf.get(m).concat(bundle).join(', ')}`);
+    memberOf.set(m, [bundle]);
+  }
+}
+for (const [bundle, members] of Object.entries(aggregates)) {
+  if (!Array.isArray(members)) continue;
+  for (const m of members) if (hostSet.has(m) && Object.hasOwn(deps, m)) fail(`聚合包成员 ${m} 同时是宿主层，不需要再作为依赖`);
+}
+
 for (const b of bundleOrder) {
   if (hostSet.has(b)) continue;
   if (!Object.hasOwn(deps, b)) fail(`bundleOrder 里的 ${b} 既不是宿主层、也不在 dependencies 里有来源（新机器会加载失败）`);
 }
 for (const d of Object.keys(deps)) {
-  if (!bundleOrder.includes(d)) fail(`依赖 ${d} 不在 bundleOrder 里 —— 装了却从不挂载，是纯负重`);
+  if (!bundleOrder.includes(d) && !memberOf.has(d)) fail(`依赖 ${d} 不在 bundleOrder 里、也不是任何聚合包的成员 —— 装了却从不挂载，是纯负重`);
 }
 
 for (const p of intent.derivedOverridesFrom ?? []) {

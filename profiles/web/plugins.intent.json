@@ -31,11 +31,14 @@
   ],
   "npm": {
     "@linxin666/dsh-session-archive": "0.4.7",
-    "@linxin666/dsh-web-all": "0.4.7",
-    "@mars-sea/dsh-commandcode-provider": "0.16.0",
+    "@linxin666/dsh-web-all": "0.4.15",
+    "@mars-sea/dsh-commandcode-provider": "0.17.2",
     "@tt-a1i/archify-dsh": "1.0.0",
     "dsh-undo-savepoint": "0.5.0",
-    "dshmarket": "1.71.1"
+    "dshmarket": "1.73.12",
+    "@linxin666/dsh-pet": "0.4.15",
+    "@smalltailqwq/dsh-client-ui-skin-deep-whale-manager": "0.1.8",
+    "dsh-plugin-wallpaper-engine": "1.4.2"
   },
   "$comment_github": [
     "自研插件一律走 github: 浮动引用，不钉版本 —— 它们的发布节奏跟着仓库走。",
@@ -61,7 +64,12 @@
     "@snow-the/dsh-snapshot": "snow-The/dsh-snapshot",
     "@snow-the/dsh-w8-sandbox": "snow-The/dsh-w8-sandbox",
     "aegis": "GanyuanRan/Aegis#v2.14.2",
-    "dsh-ark-plan": "snow-The/dsh-ark-plan"
+    "dsh-ark-plan": "snow-The/dsh-ark-plan",
+    "@snow-the/dsh-bundle-core": "snow-The/dsh-bundle-core",
+    "@snow-the/dsh-bundle-dev": "snow-The/dsh-bundle-dev",
+    "@snow-the/dsh-bundle-ingest": "snow-The/dsh-bundle-ingest",
+    "@snow-the/dsh-bundle-integrations": "snow-The/dsh-bundle-integrations",
+    "@snow-the/dsh-bundle-research": "snow-The/dsh-bundle-research"
   },
   "$comment_derivedOverrides": [
     "这些包的发布物内部含子包，且子包写成 caret —— 会漂到下一代。",
@@ -96,35 +104,47 @@
     "ssh2",
     "typescript"
   ],
-  "$comment_bundleOrder": [
-    "挂载顺序是人的决定（顺序会影响谁先注册服务），所以完整显式列出，derive 不猜。",
-    "derive 会断言：每一条要么在 hostBundles 里、要么在 dependencies 里有来源，否则直接失败。",
-    "2026-11-02 实测「扁平 vs 聚合」：把活机器的 5 个聚合包成员展开得到 17 个，与本文件列出的 20 个 @snow-the 条目比对 —— **只在聚合里的 0 个、只在扁平里的 3 个**（session-handoff / orchestrator / plugin-levels，它们在本机也是直挂）。",
-    "所以两种形式挂载的插件集合相同，差别只在维护位置：扁平＝成员写在模板里（改一个插件只改这个文件）；聚合＝成员写在聚合包仓库里（改成员要推那个仓库）。",
-    "模板的用途是「换机器复现」，因此选扁平：少一个活动部件，成员一眼可见。5 个聚合包仓库保留可用，但模板不挂它们 —— 同一个 loader id 被两层声明时后写的静默胜出。"
-  ],
+  "$comment_aggregates": "聚合包只插入成员的 row，不搬代码；成员仍是独立套件、单独安装。因此成员【只能】出现在这里，不能同时列进 bundleOrder —— 同一个 id 被 bundle 与 profile 两层宣告时，后写入的那层静默胜出。",
+  "aggregates": {
+    "@snow-the/dsh-bundle-core": [
+      "@snow-the/dsh-session-bus",
+      "@snow-the/dsh-snapshot",
+      "@snow-the/dsh-plugin-doctor",
+      "@snow-the/dsh-session-repair"
+    ],
+    "@snow-the/dsh-bundle-dev": [
+      "@snow-the/dsh-gitkit",
+      "@snow-the/dsh-skill-pack",
+      "@snow-the/dsh-plugin-guide"
+    ],
+    "@snow-the/dsh-bundle-ingest": [
+      "@snow-the/dsh-search",
+      "@snow-the/dsh-browser",
+      "@snow-the/dsh-w8-sandbox",
+      "@snow-the/dsh-lib-analyzer"
+    ],
+    "@snow-the/dsh-bundle-integrations": [
+      "@snow-the/dsh-busyloop",
+      "@snow-the/dsh-eigenflux",
+      "@snow-the/dsh-memory",
+      "@snow-the/dsh-toolbox"
+    ],
+    "@snow-the/dsh-bundle-research": [
+      "@snow-the/dsh-research-lab",
+      "@snow-the/dsh-alexlib"
+    ]
+  },
+  "$comment_bundleOrder": "挂载顺序 = 加载顺序。聚合包成员不在这里（见 aggregates）。",
   "bundleOrder": [
     "@deepseek-ai/dsh-base",
     "@deepseek-ai/dsh-web-app",
-    "@snow-the/dsh-session-bus",
+    "@snow-the/dsh-bundle-core",
     "aegis",
-    "@snow-the/dsh-busyloop",
-    "@snow-the/dsh-gitkit",
-    "@snow-the/dsh-snapshot",
-    "@snow-the/dsh-plugin-doctor",
-    "@snow-the/dsh-plugin-guide",
-    "@snow-the/dsh-skill-pack",
+    "@snow-the/dsh-bundle-research",
+    "@snow-the/dsh-bundle-ingest",
+    "@snow-the/dsh-bundle-dev",
+    "@snow-the/dsh-bundle-integrations",
     "@snow-the/dsh-session-handoff",
-    "@snow-the/dsh-session-repair",
-    "@snow-the/dsh-lib-analyzer",
-    "@snow-the/dsh-browser",
-    "@snow-the/dsh-search",
-    "@snow-the/dsh-research-lab",
-    "@snow-the/dsh-alexlib",
-    "@snow-the/dsh-eigenflux",
-    "@snow-the/dsh-w8-sandbox",
-    "@snow-the/dsh-orchestrator",
-    "@snow-the/dsh-plugin-levels",
     "@tt-a1i/archify-dsh",
     "dsh-undo-savepoint",
     "dsh-ark-plan",
@@ -133,9 +153,12 @@
     "@linxin666/dsh-web-all",
     "@mars-sea/dsh-commandcode-provider",
     "@deepseek-ai/dsh-experimental-agent-team-profile",
-    "@snow-the/dsh-memory",
-    "@snow-the/dsh-toolbox",
+    "@snow-the/dsh-plugin-levels",
     "@snow-the/dsh-agent-reach",
+    "@snow-the/dsh-orchestrator",
+    "@linxin666/dsh-pet",
+    "@smalltailqwq/dsh-client-ui-skin-deep-whale-manager",
+    "dsh-plugin-wallpaper-engine",
     "@snow-the/dsh-skin-own",
     "@snow-the/dsh-we-plus"
   ]

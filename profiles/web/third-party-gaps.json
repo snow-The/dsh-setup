@@ -19,19 +19,23 @@
     },
     {
       "pkg": "dshmarket",
-      "spec": "1.71.1",
+      "spec": "1.73.12",
       "gap": "①没有 engines.dsh，也没有 peerDependencies.dsh（peers 只有 cordis / dsh-settings / schemastery，宿主都满足），所以宿主门禁无从判定；②客户端包 client/client.js 里硬 require(\"@deepseek-ai/dsh-client-ui-primitives\")，而 0.2.1-rc.5 已把该包删除并并入 dsh-client-ui-renderer —— 1.71.1 与 1.73.7 **同样如此**。",
       "effect": "①装到任何一代宿主都会被接受，没有版本闸；②「要不要升到 1.73.7」这个问题现在的答案是：**升了既不更好也不更坏**——硬 require 与缺失的 client.inject 目标（dsh-client-runtime / dsh-invariants）在 1.71.1 上就已经存在，这不是升级引入的，是代际缺口。服务端不受影响，退化只在市场上那块的客户端。",
       "compensate": "精确钉 1.71.1 不动；要升就先接受客户端那块退化。判据（2026-11-02 实测）：npm pack 两个版本 → 扫 client/client.js 的 require → 拿宿主 302 个包对照；两版 peers 逐字相同。1.71.1 在 0.2.1-rc.3 上跑过真启动与 17/17 模块加载。",
-      "recorded": "2026-11-02"
+      "recorded": "2026-11-02",
+      "spec_audited": "1.71.1",
+      "§未复核": "1.73.12 与 1.71.1 之间未在模板侧重跑审计：本条的结论（硬 require 已删除的 dsh-client-ui-primitives、peers 只有 cordis/dsh-settings/schemastery）来自 1.71.1 与 1.73.7 两次实测。线上 profile 自 2026-11-09 起实际运行 1.73.12，服务端无异常。"
     },
     {
       "pkg": "@mars-sea/dsh-commandcode-provider",
-      "spec": "0.16.0",
+      "spec": "0.17.2",
       "gap": "peerDependencies 仍硬要 @deepseek-ai/dsh-client-ui-slots 与 @deepseek-ai/dsh-client-ui-primitives —— 这两个包在 0.2.1 已删除（实现并入 dsh-client-ui-renderer）。0.16.0 里**仍然存在**，缺口没有变。",
       "effect": "peer 不可满足时靠 profile 的 autoInstallPeers:false 才没在安装期炸。engines.dsh 在 0.16.0 是 `>=0.2.1-rc.2 <0.2.2-0 || >=0.2.2-alpha.2 <0.2.3-0`。**更正(2026-11-05)**：原记录说「0.2.2 正式版会被整包拒载」——**错的**。用 semver 实判：0.2.1-rc.5 / 0.2.2-alpha.2 / 0.2.2-alpha.3 / **0.2.2-rc.1** / **0.2.2** 全部接受，只有 0.2.3-alpha.1 起被拒。第二个区间 `>=0.2.2-alpha.2 <0.2.3-0` 已经把整个 0.2.2 系列（含 rc 与正式版）包进去了。",
       "compensate": "精确钉版本；同代审计逐条检查它 import 的包在宿主里存在。0.15.4 在 0.2.1-rc.3 上跑过装配与真启动 PASS；**0.16.0 在 0.2.1-rc.5 上跑过 guide_boot（20 秒存活、stderr 空、DOM 无插件加载错误）**，且 audit-generation 的 import 列全绿。 0.2.2-rc.1 这条上界不是障碍（semver 实测），所以升级判断不该拿它当理由；真正的风险在插件 API 变更（tools.resolve/executable、PTC 拆分、agent.model vs 改 agent/request 的路由），要按代码逐条查。",
-      "recorded": "2026-11-05"
+      "recorded": "2026-11-05",
+      "spec_audited": "0.16.0",
+      "§未复核": "0.17.2 未在模板侧重跑 guide_boot / import 列审计；原有结论（peer 仍要已删除的两个 client 包、engines.dsh 接受 0.2.2 全系列）来自 0.16.0。线上自 2026-11-09 起运行 0.17.2。"
     },
     {
       "pkg": "dsh-undo-savepoint",

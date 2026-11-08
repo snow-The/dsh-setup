@@ -1,12 +1,27 @@
-derive: local 依赖支持 ~ 展开，file: 值必须是绝对路径
+intent: 认出聚合包，profile 对齐线上 24 行
 
-上一版把 local 写成 ../../../.dsh-starter/...，在仓库里跑得通，
-但 selftest 的 scaffold 把脚本复制到临时目录后同一个意图字符串就
-指向了另一个地方 —— 而生成出来的 file: 值又跟着 ROOT 走，于是
-"配置看起来对、装出来是错的"。control case 抓到的正是这个：
-file:C:/Users/snow/AppData/Local/Temp/ctl-.../~/.dsh-starter/...
+线上 profile 的挂载面有两个：dsh.profile.bundles 里的 5 个聚合包，
+以及一份 13KB 手写 cordis.patch.yml。模板只建模了前者，于是
+setup 看起来「漏了一堆」：5 个聚合包整个不在意图里，几个第三方包
+（pet / deep-whale 皮肤 / wallpaper-engine）和 aegis 的挂载方式也没记。
 
-改法：抽一个 localDir()，断言和生成两条路径共用它；~ 展开成家目录。
-file: 值现在落在家目录绝对路径上，与 cwd 无关。
+这一版补上聚合包：
 
-gates: derive:check pass · selftest 18/18 · check-template 23/0
+· intent 新增 aggregates = {聚合包: [成员]}，断言要求成员必须也是依赖
+  （聚合包只写 row，加载时仍从 profile 的 node_modules 按包名解析），
+  并且成员【不能】同时列进 bundleOrder —— 同一个 id 被两层宣告时，
+  后写入的那层静默胜出，这是线上实测过的坑。
+· 「装了却从不挂载」改判为 bundleOrder ∪ 聚合包成员，否则会逼着人
+  把成员再列一遍，正好踩上面那个坑。
+· bundleOrder 对齐线上 24 行；5 个聚合包改成 github: 源（它们已经是
+  source/repos 下的独立仓库，各自有 main 与历史）。
+· 5 个聚合包从 _bundles 搬成独立库后，本地那 3 笔未提交的 patch 修改
+  也一起落进了各自仓库（memory/toolbox 接入、notemap/acp-memory 移除）。
+· 追平 3 个第三方 npm 版本到线上实际值；third-party-gaps 记录同步，
+  但把「未在模板侧重跑审计」显式写成 §未复核，不改写成审计结论。
+
+与线上的实测差：deps live 40 / 生成 39（差的是已退役的 acp-memory、
+notemap 两个死依赖），bundles 24 / 25（多 aegis：线上靠 patch 挂、
+生成物靠 bundle 挂）。
+
+gates: derive:check pass · selftest 18/18 · check-template 23/0 · check-template.selftest 25/25
