@@ -74,11 +74,11 @@
     "路徑相對這個 repo 的根目錄；derive 會驗證目錄下 package.json 的 name 等於鍵。"
   ],
   "local": {
-    "@snow-the/dsh-agent-reach": "../../../.dsh-starter/plugins/dsh-agent-reach",
-    "@snow-the/dsh-memory": "../../../.dsh-starter/plugins/dsh-memory",
-    "@snow-the/dsh-skin-own": "../../../.dsh-starter/plugins/dsh-skin-own",
-    "@snow-the/dsh-toolbox": "../../../.dsh-starter/plugins/dsh-toolbox",
-    "@snow-the/dsh-we-plus": "../../../.dsh-starter/plugins/dsh-we-plus"
+    "@snow-the/dsh-agent-reach": "~/.dsh-starter/plugins/dsh-agent-reach",
+    "@snow-the/dsh-memory": "~/.dsh-starter/plugins/dsh-memory",
+    "@snow-the/dsh-skin-own": "~/.dsh-starter/plugins/dsh-skin-own",
+    "@snow-the/dsh-toolbox": "~/.dsh-starter/plugins/dsh-toolbox",
+    "@snow-the/dsh-we-plus": "~/.dsh-starter/plugins/dsh-we-plus"
   },
   "derivedOverridesFrom": [
     "@linxin666/dsh-web-all"

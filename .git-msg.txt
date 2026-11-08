@@ -1,0 +1,12 @@
+derive: local 依赖支持 ~ 展开，file: 值必须是绝对路径
+
+上一版把 local 写成 ../../../.dsh-starter/...，在仓库里跑得通，
+但 selftest 的 scaffold 把脚本复制到临时目录后同一个意图字符串就
+指向了另一个地方 —— 而生成出来的 file: 值又跟着 ROOT 走，于是
+"配置看起来对、装出来是错的"。control case 抓到的正是这个：
+file:C:/Users/snow/AppData/Local/Temp/ctl-.../~/.dsh-starter/...
+
+改法：抽一个 localDir()，断言和生成两条路径共用它；~ 展开成家目录。
+file: 值现在落在家目录绝对路径上，与 cwd 无关。
+
+gates: derive:check pass · selftest 18/18 · check-template 23/0

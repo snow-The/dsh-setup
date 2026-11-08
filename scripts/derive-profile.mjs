@@ -44,6 +44,7 @@
  *   node scripts/derive-profile.mjs --offline  # 跳过 npm 查询（只验证结构与依赖/顺序）
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { npmView, hasBuildScript } from './npm-view.mjs';
@@ -82,6 +83,18 @@ const hostBundles = intent.hostBundles ?? [];
 const buildDeps = intent.buildDeps ?? [];
 const bundleOrder = intent.bundleOrder ?? [];
 
+/**
+ * local 依赖的目录解析。~ 展开成家目录是必须的：
+ * 用 ../../ 相对路径时，一旦脚本被复制到别处（selftest 的 scaffold）或从别的 cwd 跑，
+ * 同一个意图字符串就指向两个不同的目录 —— 那是"配置看起来对、装出来是错的"。
+ * file: 值必须落在绝对路径上，pnpm 才不依赖 cwd。
+ */
+function localDir(rel) {
+  if (rel === '~') return os.homedir();
+  if (rel.startsWith('~/') || rel.startsWith('~\\')) return path.join(os.homedir(), rel.slice(2));
+  return path.resolve(ROOT, rel);
+}
+
 // ---------- 结构断言 ----------
 for (const [name, v] of Object.entries(npmDeps)) {
   if (!/^\d+\.\d+\.\d+$/.test(String(v))) fail(`npm 依赖 ${name} 的版本是 "${v}"，必须是精确版本（不能是范围）`);
@@ -91,7 +104,7 @@ for (const [name, v] of Object.entries(ghDeps)) {
 }
 for (const [name, rel] of Object.entries(localDeps)) {
   if (typeof rel !== 'string' || rel.length === 0) { fail(`local 依赖 ${name} 的值不是路徑`); continue; }
-  const dir = path.resolve(ROOT, rel);
+  const dir = localDir(rel);
   const pkgFile = path.join(dir, 'package.json');
   if (!fs.existsSync(pkgFile)) { fail(`local 依赖 ${name} 指向 ${rel}，但那里没有 package.json`); continue; }
   let pkg;
@@ -104,7 +117,7 @@ for (const b of hostBundles) if (!/^@deepseek-ai\//.test(b)) fail(`hostBundles �
 const deps = {};
 for (const [k, v] of Object.entries(npmDeps)) deps[k] = v;
 for (const [k, v] of Object.entries(ghDeps)) deps[k] = `github:${v}`;
-for (const [k, v] of Object.entries(localDeps)) deps[k] = `file:${path.resolve(ROOT, v).replaceAll('\\', '/')}`;
+for (const [k, v] of Object.entries(localDeps)) deps[k] = `file:${localDir(v).replaceAll('\\', '/')}`;
 
 for (const b of hostBundles) if (Object.hasOwn(deps, b)) {
   fail(`${b} 同时出现在 hostBundles 和 dependencies 里 —— 同一插件两个副本，宿主升级后 profile 那份会滞留旧版本`);
