@@ -19,14 +19,14 @@ autoInstallPeers: false
 # the key format to the hashed form).
 allowBuilds:
   # --- github:/file: deps: each builds its own dist/ in a prepare script ---
-  "@snow-the/dsh-acp-memory": true
+  "@snow-the/dsh-agent-reach": true
   "@snow-the/dsh-alexlib": true
   "@snow-the/dsh-browser": true
   "@snow-the/dsh-busyloop": true
   "@snow-the/dsh-eigenflux": true
   "@snow-the/dsh-gitkit": true
   "@snow-the/dsh-lib-analyzer": true
-  "@snow-the/dsh-notemap": true
+  "@snow-the/dsh-memory": true
   "@snow-the/dsh-orchestrator": true
   "@snow-the/dsh-plugin-doctor": true
   "@snow-the/dsh-plugin-guide": true
@@ -37,8 +37,11 @@ allowBuilds:
   "@snow-the/dsh-session-handoff": true
   "@snow-the/dsh-session-repair": true
   "@snow-the/dsh-skill-pack": true
+  "@snow-the/dsh-skin-own": true
   "@snow-the/dsh-snapshot": true
+  "@snow-the/dsh-toolbox": true
   "@snow-the/dsh-w8-sandbox": true
+  "@snow-the/dsh-we-plus": true
   "aegis": true
   "dsh-ark-plan": true
   # --- npm deps that declare a build script ---
