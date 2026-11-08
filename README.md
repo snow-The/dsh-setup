@@ -31,6 +31,8 @@ dsh-setup/
 │   ├── audit-plugins.mjs        # 对一个 profile 的依赖做六维审计（来源/版本/内容/世代/入口/挂载）
 │   ├── audit-runtime.mjs        # 运行时足迹（spawn/端口/定时器/绝对路径）+ --expect-host 世代一致性
 │   ├── audit-logs.mjs           # 插件写进启动通道的日志是否合规（前缀 / 级别 / 值 dump）
+│   ├── audit-patch-rows.mjs     # 真实 profile 的 patch row 与记录对账（未登记/已消失都要看得见）
+│   ├── patch-rows-lib.mjs       # patch row 的最小解析（只认 id/name/disabled，不碰 config）
 │   ├── boot-check.mjs           # 真启动一次 profile，验证装配/服务/无报错
 │   ├── plugin-load-check.mjs    # 在指定宿主的真实包上执行插件入口（严格钉住宿主版本）
 │   ├── host-map.mjs             # 把 @deepseek-ai/* 严格钉到指定宿主 + 解析自证
@@ -47,6 +49,7 @@ dsh-setup/
     │   ├── cordis.patch.yml     # 用户 patch 层（默认空 `[]`，见「外部服务不进 MCP」）
     │   ├── cordis.yml           # profile 根（空列表，勿改）
     │   ├── third-party-gaps.json # 第三方「门禁无从判定」的记录（check-template [8] 校验它与依赖一致）
+    │   ├── patch-rows.json       # 本机 patch 每条 row 的分类：structural = 模板必须有 / personal = 模板必须没有（[9] 双向校验）
     │   ├── .npmrc               # 关掉 peer 自动安装（[2d] 校验；见「干净安装为什么会死在 peer 上」）
     │   └── pnpm-workspace.yaml  # pnpm 配置（allowBuilds 段是生成物，其余手写）
     └── web.local/               # 站点覆盖层（可选，部署时递归合并到模板之上）

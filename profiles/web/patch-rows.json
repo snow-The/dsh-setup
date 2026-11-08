@@ -1,0 +1,97 @@
+{
+  "$comment": "这台机器 profile 的 cordis.patch.yml 里有哪些 row、每一条该不该进模板。存在的理由：模板故意留空（2026-10-27 裁定：模型路由 / 权限预设 / 主题不交给模板决定），但「故意不写」和「忘了写」在文件上长得一模一样 —— 新机器少了似的功能，没人分得清是设计还是漏了。所以把每条 row 记成可校验的记录：structural = 模板必须有它，缺了就是漏；personal = 模板必须没有它，写进去就是替人做决定。check-template [9] 双向校验这份记录与模板 patch：任何一边对不上立刻落闸。新增 row 时先跑 node scripts/audit-patch-rows.mjs --live <profile 的 patch> --write，未分类的会以 unclassified 写进来并让门禁失败，逼人给出理由。",
+  "rows": [
+    {
+      "id": "web",
+      "class": "personal",
+      "why": "searchProvider / fetchProvider 选哪家是这台机器的选择，不是模板该定的"
+    },
+    {
+      "id": "authorization",
+      "class": "personal",
+      "why": "挂不挂官方鉴权包是使用场景决定（本地回环跑不需要，公网暴露就必须有）。模板不含它 ⇒ 新 profile 默认无鉴权；这条风险是明知的，不是漏掉的",
+      "risk": "新装 profile 默认没有鉴权层 —— 只有在 127.0.0.1 上跑才安全"
+    },
+    {
+      "id": "ui-settings-general",
+      "class": "personal",
+      "why": "welcomeNoticeVersion 是本机看到过哪一版欢迎提示的游标"
+    },
+    {
+      "id": "permission",
+      "class": "personal",
+      "why": "权限预设 / sandbox / approval 默认值 —— 2026-10-27 明确否掉搬进模板"
+    },
+    {
+      "id": "llm-pi-ai",
+      "class": "personal",
+      "why": "模型路由与 apiKeyEnv —— 谁用哪家模型是每台机器自己的事（2026-10-27 裁定）"
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "class": "personal",
+      "why": "自定义模型定义（contextWindow / reasoningEfforts）随账号与渠道而变"
+    },
+    {
+      "id": "agent-default-model",
+      "class": "personal",
+      "why": "默认模型与推理档位 —— 2026-10-27 裁定不进模板"
+    },
+    {
+      "id": "ui-theme",
+      "class": "personal",
+      "why": "明暗主题偏好 —— 2026-10-27 裁定不进模板"
+    },
+    {
+      "id": "llm-commandcode",
+      "class": "personal",
+      "why": "第三方 provider 的 accounts / visibleModels / 凭据轮换引用"
+    },
+    {
+      "id": "agent-preset-registry",
+      "disabled": true,
+      "class": "personal",
+      "why": "在本机被显式禁用；这是使用习惯，不是结构"
+    },
+    {
+      "id": "web-ui-ssh",
+      "class": "personal",
+      "why": "SSH 面板开关 —— 配置已挂载插件（id 由 bundle 提供），面板要不要出现由人决定"
+    },
+    {
+      "id": "web-ui-pet",
+      "disabled": true,
+      "class": "personal",
+      "why": "宠物面板的位置与开关（同时有 pet 这条配置 row）"
+    },
+    {
+      "id": "web-ui-browser-view",
+      "disabled": true,
+      "class": "personal",
+      "why": "浏览器面板开关"
+    },
+    {
+      "id": "web-ui-skin-center",
+      "disabled": true,
+      "class": "personal",
+      "why": "皮肤中心面板开关"
+    },
+    {
+      "id": "skin-own",
+      "disabled": true,
+      "class": "personal",
+      "why": "自建皮肤插件的配置；本机禁用"
+    },
+    {
+      "id": "pet",
+      "class": "personal",
+      "why": "宠物插件的展示配置（visible / size / 位置）"
+    },
+    {
+      "id": "web-ui-win-bash",
+      "disabled": true,
+      "class": "personal",
+      "why": "Windows bash 面板开关"
+    }
+  ]
+}

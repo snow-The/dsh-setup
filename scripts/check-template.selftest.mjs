@@ -47,7 +47,10 @@ function scaffold() {
   for (const rel of ['setup.ps1', 'setup.sh', 'README.md']) {
     fs.copyFileSync(path.join(ROOT, rel), path.join(dst, rel));
   }
-  fs.copyFileSync(path.join(ROOT, 'scripts', 'check-template.mjs'), path.join(dst, 'scripts', 'check-template.mjs'));
+  for (const name of fs.readdirSync(path.join(ROOT, 'scripts'))) {
+    const s = path.join(ROOT, 'scripts', name);
+    if (fs.statSync(s).isFile()) fs.copyFileSync(s, path.join(dst, 'scripts', name));
+  }
   return dst;
 }
 
@@ -265,6 +268,27 @@ const cases = [
       const j = JSON.parse(fs.readFileSync(p, 'utf8'));
       j.gaps[0].spec = '9.9.9';
       fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
+    },
+  },
+  {
+    label: '把一条 personal row 改标成 structural（模板里并没有它）',
+    expectFail: true,
+    expectId: '9',
+    mutate: (d) => {
+      const p = path.join(d, 'profiles', 'web', 'patch-rows.json');
+      const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+      j.rows.find((r) => r.class === 'personal').class = 'structural';
+      fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
+    },
+  },
+  {
+    label: '把一条 personal row 真的写进模板 patch',
+    expectFail: true,
+    expectId: '9',
+    mutate: (d) => {
+      const p = path.join(d, 'profiles', 'web', 'cordis.patch.yml');
+      const t = fs.readFileSync(p, 'utf8');
+      fs.writeFileSync(p, t.replace(/\[\s*\]\s*$/, "- id: ui-theme\n  config:\n    preference: dark\n"));
     },
   },
   // ---- 6: 自证机制本身 ----

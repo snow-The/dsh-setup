@@ -25,6 +25,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parsePatchRows } from './patch-rows-lib.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PROFILE = path.join(ROOT, 'profiles', 'web');
@@ -54,6 +55,7 @@ const CHECKS = {
   '5b': 'setup.ps1 不使用裸 Get-Content',
   '7': 'README 的文件树列出了 scripts/ 下的全部脚本',
   '8': '第三方门禁盲区记录与模板依赖一致（不陈旧）',
+  '9': 'patch row 记录与模板双向一致（故意留空 vs 忘了写，可区分）',
 };
 
 if (process.argv.includes('--list-checks')) {
@@ -421,6 +423,62 @@ function walkPs1(dir, out = []) {
 
   if (problems.length) bad('8', `第三方门禁盲区记录不可用: ${problems.join('; ')}`);
   else ok('8', `${count} 条第三方门禁盲区记录与模板依赖逐字一致`);
+}
+
+// ---------- 9. patch row 记录与模板双向一致 ----------
+// 模板的 patch 是空列表，这是 2026-10-27 的裁定（模型路由 / 权限预设 / 主题不进模板）。
+// 问题是「故意不写」和「忘了写」在文件上长得一模一样：新机器少了皮肤中心、宠物面板、
+// 鉴权层，没人分得清那是设计还是漏了 —— 而且少掉的东西不报错，只是功能静默消失。
+// 所以每条 row 都要有一条记录，标明它属于哪一类：
+//   structural → 模板必须有它（缺了就是漏）
+//   personal   → 模板必须没有它（写进去就是替人做决定）
+// 记录与**真实** profile 的对账在 scripts/audit-patch-rows.mjs —— 那需要真实 patch 路径，
+// 刻意不放进模板自检（自检不该依赖某一台机器上有什么）。
+{
+  const invPath = path.join(PROFILE, 'patch-rows.json');
+  const patchPath = path.join(PROFILE, 'cordis.patch.yml');
+  const problems = [];
+  let inv = null;
+  try {
+    inv = JSON.parse(fs.readFileSync(invPath, 'utf8'));
+  } catch (e) {
+    problems.push(`patch-rows.json 缺失或不可解析: ${e.message}`);
+  }
+  if (inv) {
+    const rows = inv.rows ?? [];
+    if (!Array.isArray(rows) || rows.length === 0) problems.push('patch-rows.json 里没有任何 row 记录');
+    const seen = new Set();
+    for (const r of rows) {
+      if (!r || typeof r.id !== 'string' || !r.id) { problems.push('有 row 记录缺少 id'); continue; }
+      if (seen.has(r.id)) problems.push(`row 记录重复: ${r.id}`);
+      seen.add(r.id);
+      if (!['structural', 'personal'].includes(r.class)) problems.push(`${r.id} 未分类（class=${JSON.stringify(r.class)}）`);
+      if (typeof r.why !== 'string' || r.why.trim().length < 4) problems.push(`${r.id} 没有说明为什么（why 为空）`);
+    }
+
+    let templateRows = [];
+    try {
+      templateRows = parsePatchRows(patchPath);
+    } catch (e) {
+      problems.push(`模板 cordis.patch.yml 不可解析: ${e.message}`);
+    }
+    const templateIds = new Set(templateRows.map((r) => r.id));
+    // 双向：structural 必须在模板里，personal 必须不在，模板里的每一行都必须有记录
+    for (const r of rows) {
+      if (!r || typeof r.id !== 'string') continue;
+      const inTemplate = templateIds.has(r.id);
+      if (r.class === 'structural' && !inTemplate) problems.push(`${r.id} 标为 structural 但模板里没有 —— 新机器会少这条`);
+      if (r.class === 'personal' && inTemplate) problems.push(`${r.id} 标为 personal 却出现在模板里 —— 模板在替人做决定`);
+    }
+    for (const t of templateRows) {
+      if (!seen.has(t.id)) problems.push(`模板里有未登记的 row: ${t.id}`);
+    }
+
+    if (problems.length) bad('9', `patch row 记录与模板不一致: ${problems.join('; ')}`);
+    else ok('9', `${rows.length} 条 row 记录与模板双向一致（structural 在、personal 不在）`);
+  } else {
+    bad('9', `patch row 记录不可用: ${problems.join('; ')}`);
+  }
 }
 
 // ---------- 6. 自证：登记过的检查必须全部真的执行过 ----------
