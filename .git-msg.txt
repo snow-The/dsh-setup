@@ -1,34 +1,5 @@
-feat: 把 profile patch 的挂载面变成可校验的记录
+chore: 提交消息临时文件的名字比忽略规则宽
 
-模板的 cordis.patch.yml 是空列表，这是 2026-10-27 的裁定（模型路由 /
-权限预设 / 主题不交给模板决定）。但「故意不写」和「忘了写」在文件上
-长得一模一样：新机器少了皮肤中心、宠物面板、鉴权层，没人分得清是
-设计还是漏了 —— 而且少掉的东西不报错，只有功能静默消失。线上那份
-patch 有 17 条 row，模板里 0 条，这个差以前没有任何地方说得出话。
-
-所以补的是「差在哪里、每条为什么」，不是把 row 搬进模板：
-
-· profiles/web/patch-rows.json：17 条逐条分类。structural = 模板必须有
-  （缺了是漏），personal = 模板必须没有（写进去就是替人做决定）。每条
-  带 why；鉴权那条额外标了 risk —— 模板不含它意味着新装 profile 默认
-  无鉴权，只有在回环上跑才安全。这个风险是明知的，不是漏的。
-· scripts/patch-rows-lib.mjs：只认 id / name / disabled 的最小解析器。
-  刻意不用 YAML 库：`!!js` 表达式与 tab 缩进会让通用解析器做出我们不
-  想要的解释，而这一层只需要「哪些 row 存在」。
-· scripts/audit-patch-rows.mjs：拿真实 profile 的 patch 与记录对账。
-  未登记的 row 默认 exit 1；--write 会把它们以 class=unclassified 写进
-  记录 —— 未分类是显式的第三种状态，门禁会一直失败直到人给出判断，
-  不是默认通过。
-· check-template [9]：双向校验。structural 必须在模板里、personal 必须
-  不在、模板里每一行都必须有记录、未分类直接失败。
-· selftest 加了两个变异用例（把 personal 改标 structural；把 personal
-  真的写进模板），并让 scaffold 复制整个 scripts/ 目录 —— 以前只复制
-  check-template.mjs，新抽出的模块在临时目录里会 import 不到，而那种
-  失败会被 expectFail 用例吞掉。
-
-实测（不是推断）：
-· 加一条 brand-new-row 到真实 patch → 对账 exit 1 并点名行号
-· --write → 写入 unclassified，check-template [9] 落闸
-· 清理后 17/17 一致、[9] 通过
-gates: check-template 24/0 · check-template.selftest 27/27 · derive:check pass ·
-derive selftest 18/18
+忽略规则写的是 `.*commit-msg*`，而这次我用的是 `.git-msg.txt` ——
+规则没命中，git add -A 把它提交了进去。模式写得太具体等于没写，
+改成 `.*msg*.txt` 覆盖所有变体，并删掉误提交的那个文件。
