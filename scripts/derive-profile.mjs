@@ -57,6 +57,14 @@ const WS_PATH = path.join(PROFILE, 'pnpm-workspace.yaml');
 
 const WRITE = process.argv.includes('--write');
 const OFFLINE = process.argv.includes('--offline');
+// --prefer-local：线上 profile 要的是「工作副本」不是「仓库快照」。
+// 理由（实测）：生成物把 23 个自有插件从 file: 改成 github:，而本地常有不
+// 未推送的改动（例如 lab 的多写者基础 c0ecfa8）；照抄生成物等于把线上回退成
+// 旧版，而且没有任何报错。所以线上用同一个意图 + 本地源。
+const PREFER_LOCAL = process.argv.includes('--prefer-local');
+// --out <dir>：把生成物写到别处（线上 profile 目录），不污染模板仓库。
+const OUT_IDX = process.argv.indexOf('--out');
+const OUT_DIR = OUT_IDX >= 0 ? process.argv[OUT_IDX + 1] : null;
 
 const problems = [];
 const fail = (m) => problems.push(m);
@@ -128,6 +136,36 @@ if (new Set(bundleOrder).size !== bundleOrder.length) {
   const seen = new Set(), dup = new Set();
   for (const b of bundleOrder) { if (seen.has(b)) dup.add(b); seen.add(b); }
   fail(`bundleOrder 有重复: ${[...dup].join(', ')}`);
+}
+
+/**
+ * 把 github: 依赖换成机器上真实存在的本地目录（工作副本）。
+ * 只认 package.json 里 name 完全一致的目录 —— 名字对不上就是把错的东西挂上去，
+ * 这种错在宿主启动时只表现成「插件没生效」。找不到就保留 github:，不猜。
+ */
+function localForGithub(name, spec) {
+  const repo = String(spec).split('#')[0];
+  const bare = repo.split('/')[1];
+  if (!bare) return null;
+  for (const base of [path.join(os.homedir(), '.dsh-starter', 'plugins'), path.join(os.homedir(), 'source', 'repos')]) {
+    const dir = path.join(base, bare);
+    const pkgFile = path.join(dir, 'package.json');
+    if (!fs.existsSync(pkgFile)) continue;
+    try {
+      if (JSON.parse(fs.readFileSync(pkgFile, 'utf8')).name === name) return dir;
+    } catch { /* 目录坏了就当没有；不静默挂上去 */ }
+  }
+  return null;
+}
+
+if (PREFER_LOCAL) {
+  const swapped = [];
+  for (const [k, v] of Object.entries(deps)) {
+    if (!String(v).startsWith('github:')) continue;
+    const dir = localForGithub(k, String(v).slice('github:'.length));
+    if (dir) { deps[k] = 'file:' + dir.replaceAll('\\', '/'); swapped.push(k); }
+  }
+  console.log(`  --prefer-local: ${swapped.length} 个 github 依赖改用本地工作副本`);
 }
 
 const hostSet = new Set(hostBundles);
@@ -305,6 +343,22 @@ function applyAllowBuilds(current) {
 
 // ---------- 比对 / 落盘 ----------
 const newPkg = renderPackageJson();
+if (OUT_DIR) {
+  // --out：以模板仓库的 workspace 为基底渲染，写到目标目录（线上 profile）。
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  const outPkg = path.join(OUT_DIR, 'package.json');
+  const outWs = path.join(OUT_DIR, 'pnpm-workspace.yaml');
+  const rendered = applyAllowBuilds(fs.readFileSync(WS_PATH, 'utf8'));
+  if (rendered === null) { console.error('  找不到 allowBuilds: 段，无法推导'); process.exit(1); }
+  if (!WRITE) {
+    console.log('  (dry) 将写入 ' + outPkg + ' 与 ' + outWs);
+    process.exit(0);
+  }
+  fs.writeFileSync(outPkg, newPkg, 'utf8');
+  fs.writeFileSync(outWs, rendered, 'utf8');
+  console.log('  ✓ 已写入 ' + OUT_DIR);
+  process.exit(0);
+}
 const curPkg = fs.readFileSync(PKG_PATH, 'utf8');
 const curWs = fs.readFileSync(WS_PATH, 'utf8');
 const newWs = applyAllowBuilds(curWs);

@@ -55,11 +55,15 @@ function entriesForProfile(name) {
   if (!existsSync(nm)) throw new Error(`profile 不存在: ${nm}（DSH_HOME=${dshHome}）`);
   const out = [];
   for (const scope of readdirSync(nm, { withFileTypes: true })) {
-    if (!scope.isDirectory()) continue;
+    // pnpm 对部分 file: 依赖建的是 junction/符号链接，Dirent.isDirectory() 对它
+    // 返回 false —— 早先这里只认 directory，于是这些包被**静默跳过**，汇总看起来
+    // 少几个入口却没有任何失败项。实测：live 的 dsh-busyloop / dsh-research-lab
+    // 就是链接，被漏掉了两个，直到拿 pilot 的 28 条清单逐条比对才看出来。
+    if (!scope.isDirectory() && !scope.isSymbolicLink()) continue;
     const scopeDir = path.join(nm, scope.name);
     if (scope.name.startsWith('@')) {
       for (const pkg of readdirSync(scopeDir, { withFileTypes: true })) {
-        if (!pkg.isDirectory()) continue;
+        if (!pkg.isDirectory() && !pkg.isSymbolicLink()) continue;
         const dir = path.join(scopeDir, pkg.name);
         const pj = path.join(dir, 'package.json');
         if (!existsSync(pj)) continue;
