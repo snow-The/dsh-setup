@@ -46,7 +46,7 @@ dsh-setup/
     ├── web/
     │   ├── plugins.intent.json  # ← 唯一事实源：要哪些插件、什么版本、按什么顺序挂载
     │   ├── package.json         # 【生成物】依赖 + bundles，勿手改
-    │   ├── cordis.patch.yml     # 用户 patch 层（默认空 `[]`，见「外部服务不进 MCP」）
+    │   ├── cordis.patch.yml     # 用户 patch 层（只留结构行：当前 1 条 disable，见「外部服务不进 MCP」）
     │   ├── cordis.yml           # profile 根（空列表，勿改）
     │   ├── third-party-gaps.json # 第三方「门禁无从判定」的记录（check-template [8] 校验它与依赖一致）
     │   ├── patch-rows.json       # 本机 patch 每条 row 的分类：structural = 模板必须有 / personal = 模板必须没有（[9] 双向校验）

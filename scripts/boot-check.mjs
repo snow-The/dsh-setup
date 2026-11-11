@@ -40,6 +40,14 @@ const TIMEOUT_S = Number(argOf('timeout', '180'));
 const DSH = argOf('dsh', 'dsh');     // 允许指定宿主可执行文件（测试/CI 用）
 const AS_JSON = argv.includes('--json');
 
+// 宿主入口可以是 .js（npx 缓存里的那份就是 @deepseek-ai/dsh/lib/bin.js）——
+// Windows 不能直接 spawn 一个 .js，必须用当前 node 执行它。实测：不处理时
+// 表现是「版本 (no output)、2 秒退出、0 条错误」，看起来像宿主坏了，实际是
+// 量具起错了进程。这类「工具自己说错话」比宿主真坏更难查，所以在入口处归一。
+const DSH_IS_JS = /\.(c|m)?js$/i.test(DSH);
+const DSH_CMD = DSH_IS_JS ? process.execPath : DSH;
+const DSH_LEAD = DSH_IS_JS ? [DSH] : [];
+
 // ---- 到底是哪一份宿主跑的这一轮（2026-10-27 补）----
 // 一个会「静默用错 dsh」的检查等于在说谎。实测：PATH 上排着一份陈旧的 pnpm 全局
 // dsh@0.1.2-alpha.5，把 npm 全局的 0.2.1-rc.2 遮在后面；同一个 profile，一份
@@ -47,8 +55,8 @@ const AS_JSON = argv.includes('--json');
 // 所以这里把「跑的是谁、还有谁存在」直接打出来，别让它成为一个隐变量。
 function hostVersion() {
   try {
-    const out = execFileSync([DSH, '--version'].join(' '), {
-      encoding: 'utf8', shell: true, stdio: ['ignore', 'pipe', 'ignore'],
+    const out = execFileSync(DSH_CMD, [...DSH_LEAD, '--version'], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
     });
     return out.trim().split(/\r?\n/).filter(Boolean).pop() ?? '(no output)';
   } catch (e) { return `(unreadable: ${String(e.message).split('\n')[0].slice(0, 70)})`; }
@@ -184,12 +192,12 @@ const dshArgs = ['--profile', PROFILE, '--no-open', '--port', String(PORT)];
 const childEnv = ISOLATED ? { ...process.env, DSH_HOME: ISOLATED.root } : process.env;
 const quoteForShell = (s) => (/[\s"]/.test(String(s)) ? `"${String(s).replace(/"/g, '\\"')}"` : String(s));
 const child = process.platform === 'win32'
-  ? spawn([DSH, ...dshArgs].map(quoteForShell).join(' '), {
+  ? spawn([DSH_CMD, ...DSH_LEAD, ...dshArgs].map(quoteForShell).join(' '), {
     shell: true,
     env: childEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
-  : spawn(DSH, dshArgs, {
+  : spawn(DSH_CMD, [...DSH_LEAD, ...dshArgs], {
     shell: false,
     detached: true,
     env: childEnv,

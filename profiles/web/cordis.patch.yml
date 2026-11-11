@@ -2,7 +2,7 @@
 # a top-level YAML array of loader patch entries (id-targeted config
 # overrides, disables, and insert lists; `!!js` expressions allowed).
 #
-# It ships EMPTY on purpose. A fresh install should start from the bundle
+# It ships with as few rows as possible (currently one). A fresh install should start from the bundle
 # defaults and grow this file deliberately — every row here is a decision that
 # has to be re-checked against the next host generation. A template that ships
 # with opinions has to maintain them.
@@ -28,4 +28,14 @@
 # Mount MCP only when its tools must participate in an interactive tool-calling
 # loop where shelling out per step would be materially worse. Check `3a` in
 # scripts/check-template.mjs enforces this — a template that mounts one fails.
-[]
+
+# ── 结构行（不是偏好）：必须关掉 @linxin666/dsh-client-ui-browser-view ──────────
+# 它由 dsh-web-all 聚合包挂上来，注册 browser_click / browser_snapshot 等与
+# @snow-the/dsh-browser 同名的工具。宿主对同名工具是硬冲突：
+#   Error: tool "browser_click" is already registered
+# 实测（2026-11-12，pilot profile 首跑）：这条不关，启动即报 3 条错误、判定 FAIL。
+# 关掉不损失能力——我们那 14 个工具一直在跑（open/click/snapshot/evaluate/fetch/
+# corpus_*），他独有的 console/navigate/network/tabs 从来没拿到过。
+# 真要那四个能力，做法是加进我们自己的插件，而不是让两支抢注册同名工具。
+- id: web-ui-browser-view
+  disabled: true

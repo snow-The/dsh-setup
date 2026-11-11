@@ -67,8 +67,9 @@
     {
       "id": "web-ui-browser-view",
       "disabled": true,
-      "class": "personal",
-      "why": "浏览器面板开关"
+      "class": "structural",
+      "why": "由 dsh-web-all 挂上来，注册与 @snow-the/dsh-browser 同名的工具（browser_click 等）；宿主对同名工具硬冲突，不关掉启动即报错。实测 2026-11-12 pilot 首跑：3 条错误、判定 FAIL。关掉不损失能力——我们那 14 个工具一直在跑，它独有的 console/navigate/network/tabs 从未拿到。",
+      "locale": "template"
     },
     {
       "id": "web-ui-skin-center",
