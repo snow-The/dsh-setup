@@ -56,6 +56,9 @@ cd "$env:USERPROFILE\.dsh\profiles\web"; pnpm install
 世代不对时，插件自己的 `peerDependencies` 会把它挡下来，报错通常只说某个 bundle 的 peer 不满足，
 看起来像「插件坏了」，实际是引擎旧了一代。
 
+> **完整的跨世代操作步骤（备份 → 装引擎 → 生成 profile → 装依赖 → 新端口试起 → 切换 → 验证 → 回滚 →
+> 症状对照表）看 [UPGRADE.md](UPGRADE.md)。** 那份是自足的，不预设你读过 dsh-profile 的任何文件。
+
 ## 这里的东西还算数吗
 
 | 还算数 | 已退役 |

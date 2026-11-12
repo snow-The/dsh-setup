@@ -44,6 +44,8 @@ if [ "$LEGACY" != "1" ]; then
   警告：本脚本会用本仓库 6666 世代（@linxin666/*）的 profiles/web 覆盖 $DSH_HOME/profiles/web。
   确实要考古请显式加 --legacy。
 
+  完整的跨世代升级步骤（含回滚与症状对照）看 UPGRADE.md。
+
 EOF
   exit 1
 fi

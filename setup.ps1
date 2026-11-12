@@ -42,6 +42,7 @@ if (-not $Legacy) {
     Write-Host ""
     Write-Host "  警告：本脚本会用本仓库 6666 世代的 profiles/web 覆盖 ~/.dsh/profiles/web。" -ForegroundColor Yellow
     Write-Host "  确实要考古请显式加 -Legacy。" -ForegroundColor Yellow
+    Write-Host "  完整的跨世代升级步骤（含回滚与症状对照）看 UPGRADE.md。" -ForegroundColor Yellow
     Write-Host ""
     exit 1
 }

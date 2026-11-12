@@ -4,6 +4,7 @@
 > profile 的生成与发布已迁到 **[snow-The/dsh-profile](https://github.com/snow-The/dsh-profile)**。
 > 这里的 `profiles/web` 停在 6666 世代（`@linxin666/*`），`setup.ps1` / `setup.sh` 现在默认拒绝运行。
 > **迁移步骤、升级怎么分两层、还剩什么能用 → [MOVED.md](MOVED.md)。**
+> **跨世代的完整操作步骤（备份 → 装引擎 → 生成 profile → 试起 → 切换 → 验证 → 回滚 → 症状表）→ [UPGRADE.md](UPGRADE.md)。**
 
 作者 **snow-The** 的 DSH 宿主侧工具集：环境体检、插件审计、启动验证、patch 守卫，以及早期的一键部署模板（已退役，见上）。
 
