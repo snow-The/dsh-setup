@@ -1,11 +1,12 @@
-﻿# dsh-setup 一键部署脚本(Windows PowerShell 5.1+ / pwsh 7+)
+# dsh-setup 一键部署脚本(Windows PowerShell 5.1+ / pwsh 7+)
 # 用法: git clone https://github.com/snow-The/dsh-setup.git; cd dsh-setup; .\setup.ps1
 # 流程: 模板自检 → 预检(远端同步) → 备份旧 profile → 复制模板 → 应用 web.local 覆盖 → 安装依赖(含宿主兼容性判定) → 冒烟测试
 # 参数: -SkipInstall 跳过安装; -SkipSmoke 跳过冒烟测试; -Force 跳过"远端不同步"/"模板自检失败"的确认
 param(
     [switch]$SkipInstall,
     [switch]$SkipSmoke,
-    [switch]$Force
+    [switch]$Force,
+    [switch]$Legacy
 )
 $ErrorActionPreference = "Stop"
 
@@ -25,6 +26,26 @@ function Read-Json([string]$Path) {
 
 Write-Host ""
 Write-Host "=== dsh-setup: 部署 web profile ===" -ForegroundColor Cyan
+
+# ---------- 0. 退役闸门 ----------
+# 这个脚本会把本仓库 6666 世代（@linxin666/*）的 profiles/web 复制到 ~/.dsh/profiles/web。
+# profile 的生成与发布已迁到 dsh-profile，默认路径不能再是这个 —— 用闸门而不是写在 README 里，
+# 因为没人会在跑之前去读 README。
+if (-not $Legacy) {
+    Write-Host ""
+    Write-Host "本脚本已退役(2026-11-12)。" -ForegroundColor Yellow
+    Write-Host "  profile 的生成与发布已迁移到：https://github.com/snow-The/dsh-profile" -ForegroundColor Yellow
+    Write-Host "  新机器请用：" -ForegroundColor Yellow
+    Write-Host "    git clone https://github.com/snow-The/dsh-profile" -ForegroundColor Gray
+    Write-Host "    cd dsh-profile/profiles/web; pnpm install" -ForegroundColor Gray
+    Write-Host "    npx --yes @deepseek-ai/dsh@<intent 里的 runtime> --profile web" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  警告：本脚本会用本仓库 6666 世代的 profiles/web 覆盖 ~/.dsh/profiles/web。" -ForegroundColor Yellow
+    Write-Host "  确实要考古请显式加 -Legacy。" -ForegroundColor Yellow
+    Write-Host ""
+    exit 1
+}
+Write-Host "( -Legacy 模式：用 6666 世代模板覆盖 profile )" -ForegroundColor DarkYellow
 
 # ---------- 0. 定位目录 ----------
 $repoDir = $PSScriptRoot

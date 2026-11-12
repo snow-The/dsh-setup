@@ -1,6 +1,11 @@
 # dsh-setup — DeepSeek Harness 多机部署模板
 
-作者 **snow-The** 的 DSH web profile 完整配置（插件列表 + patch 层），用于在新机器上快速部署出一致的环境。
+> ⚠️ **本仓库不再是部署源（2026-11-12）。**
+> profile 的生成与发布已迁到 **[snow-The/dsh-profile](https://github.com/snow-The/dsh-profile)**。
+> 这里的 `profiles/web` 停在 6666 世代（`@linxin666/*`），`setup.ps1` / `setup.sh` 现在默认拒绝运行。
+> **迁移步骤、升级怎么分两层、还剩什么能用 → [MOVED.md](MOVED.md)。**
+
+作者 **snow-The** 的 DSH 宿主侧工具集：环境体检、插件审计、启动验证、patch 守卫，以及早期的一键部署模板（已退役，见上）。
 
 > 🔒 **安全声明：本仓库不包含任何 API key、token、凭据或本机私有数据。**
 > 模型 key、SSH 密码等一律在新机器上自行配置（见「配置凭据」）。

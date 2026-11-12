@@ -13,18 +13,43 @@ OVERLAY_DIR="$REPO_DIR/profiles/web.local"
 SKIP_INSTALL=0
 SKIP_SMOKE=0
 FORCE=0
+LEGACY=0
 
 for arg in "$@"; do
   case "$arg" in
     --skip-install) SKIP_INSTALL=1 ;;
     --skip-smoke) SKIP_SMOKE=1 ;;
     --force) FORCE=1 ;;
+    --legacy) LEGACY=1 ;;
     *) echo "未知参数: $arg" >&2; exit 2 ;;
   esac
 done
 
+# ---------- 0. 退役闸门 ----------
+# 这个脚本会把本仓库 6666 世代的 profiles/web 复制到 $DSH_HOME/profiles/web。
+# profile 的生成与发布已迁到 dsh-profile，默认路径不能再是这个。
+if [ "$LEGACY" != "1" ]; then
+  cat >&2 <<'EOF'
+
+本脚本已退役（2026-11-12）。
+
+  profile 的生成与发布已迁移到：
+    https://github.com/snow-The/dsh-profile
+
+  新机器请用：
+    git clone https://github.com/snow-The/dsh-profile
+    cd dsh-profile/profiles/web && pnpm install
+    npx --yes @deepseek-ai/dsh@<intent 里的 runtime> --profile web
+
+  警告：本脚本会用本仓库 6666 世代（@linxin666/*）的 profiles/web 覆盖 $DSH_HOME/profiles/web。
+  确实要考古请显式加 --legacy。
+
+EOF
+  exit 1
+fi
+
 echo ""
-echo "=== dsh-setup: 部署 web profile ==="
+echo "=== dsh-setup: 部署 web profile （--legacy 模式） ==="
 
 # ---------- 1. 模板自检: 清单/白名单/patch 是否自洽 ----------
 # 放在最前面: 模板腐化比安装失败更隐蔽 —— 装出一个"少了一半插件"的 profile 不会报错。
