@@ -16,6 +16,8 @@ dsh-ssh.json
 
 # 日志与临时
 *.log
+*.bak
+*.bak-*
 .DS_Store
 Thumbs.db
 # 提交消息临时文件 —— 用通配覆盖所有变体。

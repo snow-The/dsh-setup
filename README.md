@@ -568,3 +568,35 @@ cd "$T/profiles/web" && pnpm install        # 用空 lockfile 覆盖真实解析
 - git 依赖（`github:snow-The/*`、`github:GanyuanRan/Aegis`）安装时需要能访问 GitHub；
 - profile 把 `packageManager` 钉在 pnpm 10：pnpm 11 改了 `allowBuilds` 的键格式（要求 `name@<tarball-url-with-commit>`），与模板的裸名清单不兼容。
 - `derive-profile.mjs` 会查 npm registry（判断哪些依赖声明了构建脚本、哪些是 caret 子依赖）。没有网络时用 `--offline`：它会跳过这些查询，**只**验证结构与顺序，不保证生成物正确。`npm view` 的输出形状由 `scripts/npm-view.mjs` 规范化 —— npm 12 会把它包成数组，遇到不认识的形状脚本会直接报错，不猜。
+
+## 回滚：`dsh-rollback.ps1`（不需要 Node）
+
+`dsh-undo-savepoint` 是 DSH 插件，靠 Node 进程活着 —— 而它最该救命的场合恰好是
+「Node 起不来 / 插件把启动搞崩 / `pnpm install` 把 node_modules 搅烂」。那种时候
+DSH 根本没启动，插件代码一行都不会执行。所以回滚不能依赖被回滚的那个运行时。
+
+`dsh-rollback.ps1` 只用 PowerShell cmdlet（`Compress-Archive` / `Expand-Archive` /
+`Get-FileHash`），在沙箱只读模式的 ConstrainedLanguage 下也能跑。
+
+```powershell
+.\dsh-rollback.ps1 -Action snapshot -Note "before rc.3 cutover"
+.\dsh-rollback.ps1 -Action list
+.\dsh-rollback.ps1 -Action mark          # 启动成功后标记「已知可用」
+.\dsh-rollback.ps1 -Action verify        # 现在和 last-good 差在哪（只读）
+.\dsh-rollback.ps1 -Action restore -Name <zip>   # 自动先拍 pre-restore，只覆盖不删除
+```
+
+快照范围（相对 `~\.dsh`）：`settings.yaml`、`ssh\hosts.json`、`automation\jobs.json`、
+`session-bus\wake-policy.json`、每个 profile 的 `package.json` / `cordis.patch.yml` /
+`cordis.yml` / `pnpm-workspace.yaml`、`plugins\*.{mjs,js,json}`。
+`*.bak-*`、`*.truncated-*`、`*.stub-*` 这类历史备份**不收** —— 把 20 个旧版本一起
+快照，只会让「当前配置」淹没在里面。session 日志、memory 库、`node_modules`、
+`pnpm-lock.yaml` 一律不进：它们大，且不是启动失败的原因。
+
+每条快照内附 `manifest.json`（每个文件的 sha256）。恢复前逐条校验哈希，**没有
+manifest 的 zip 直接拒绝**（不盲恢复）；恢复后写 `last-restore.json` 记录
+「从哪张来的、pre-restore 是哪张」。`-Drill` 用于演练（不拍 pre-restore、
+不写 last-restore），`-Drill:$false` 可以在临时目录里强制走真实流程。
+
+`.credentials.yaml` 默认**不**进快照；要连密钥一起备份得显式 `-IncludeSecrets`，
+并且清楚快照目录不是保险箱。
